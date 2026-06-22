@@ -201,8 +201,8 @@ char* git_overleaf_project_directory_name(const char* name,
 
   if (!*out) {
     free(out);
-    git_overleaf_error(
-        err, "cannot derive clone target from empty project name");
+    git_overleaf_error(err,
+                       "cannot derive clone target from empty project name");
     return NULL;
   }
   return out;

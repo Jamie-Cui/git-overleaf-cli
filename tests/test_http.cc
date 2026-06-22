@@ -53,3 +53,62 @@ TEST(OverleafProjects, ParsesProjectPageAndErrors) {
   ExpectContains(err.message, "projects array");
   git_overleaf_project_list_free(&projects);
 }
+
+TEST(OverleafRemote, ParsesRemoteTreeAndTextOps) {
+  GitOverleafError err = {};
+  const char* tree_json =
+      "{"
+      "\"name\":\"rootFolder\",\"_id\":\"root\","
+      "\"docs\":[{\"name\":\"main.tex\",\"_id\":\"doc1\"}],"
+      "\"fileRefs\":[{\"name\":\"fig.png\",\"_id\":\"file1\"}],"
+      "\"folders\":[{\"name\":\"chapters\",\"_id\":\"folder1\","
+      "\"docs\":[{\"name\":\"intro.tex\",\"_id\":\"doc2\"}],"
+      "\"fileRefs\":[],\"folders\":[]}]"
+      "}";
+  json_error_t json_err;
+  json_t* root = json_loads(tree_json, 0, &json_err);
+  ASSERT_NE(nullptr, root) << json_err.text;
+  GitOverleafRemoteTable table = {};
+  ASSERT_EQ(0, git_overleaf_overleaf_parse_remote_table(root, &table, &err))
+      << err.message;
+  json_decref(root);
+
+  GitOverleafRemoteEntity* main =
+      git_overleaf_remote_table_find(&table, "main.tex");
+  ASSERT_NE(nullptr, main);
+  EXPECT_EQ(GIT_OVERLEAF_REMOTE_DOC, main->type);
+  EXPECT_STREQ("doc1", main->id);
+  GitOverleafRemoteEntity* chapter =
+      git_overleaf_remote_table_find(&table, "chapters/intro.tex");
+  ASSERT_NE(nullptr, chapter);
+  EXPECT_EQ(GIT_OVERLEAF_REMOTE_DOC, chapter->type);
+  EXPECT_STREQ("folder1", chapter->parent_id);
+  git_overleaf_remote_table_free(&table);
+
+  json_t* op = nullptr;
+  ASSERT_EQ(0, git_overleaf_sharejs_text_op("hello", "hello world", &op, &err))
+      << err.message;
+  ASSERT_NE(nullptr, op);
+  ASSERT_EQ(1u, json_array_size(op));
+  EXPECT_STREQ(" world",
+               json_string_value(json_object_get(json_array_get(op, 0), "i")));
+  EXPECT_EQ(5, json_integer_value(json_object_get(json_array_get(op, 0), "p")));
+  json_decref(op);
+
+  ASSERT_EQ(0, git_overleaf_sharejs_text_op("same", "same", &op, &err))
+      << err.message;
+  EXPECT_EQ(nullptr, op);
+
+  std::string emoji = "\xF0\x9F\x98\x80";
+  std::string before = "a" + emoji + "b";
+  std::string after = "a" + emoji + "Xb";
+  ASSERT_EQ(
+      0, git_overleaf_sharejs_text_op(before.c_str(), after.c_str(), &op, &err))
+      << err.message;
+  ASSERT_NE(nullptr, op);
+  ASSERT_EQ(1u, json_array_size(op));
+  EXPECT_STREQ("X",
+               json_string_value(json_object_get(json_array_get(op, 0), "i")));
+  EXPECT_EQ(3, json_integer_value(json_object_get(json_array_get(op, 0), "p")));
+  json_decref(op);
+}

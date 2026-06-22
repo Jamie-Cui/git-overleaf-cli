@@ -49,19 +49,19 @@ TEST(Git, RepositoryHelpersAndSyntheticCommit) {
                                    nullptr, &err))
       << err.message;
 
-  ASSERT_EQ(0, git_overleaf_git_config_set(&cfg.value, repo.path(),
-                                           "git-overleaf.testKey", "value",
-                                           &err));
+  ASSERT_EQ(0,
+            git_overleaf_git_config_set(&cfg.value, repo.path(),
+                                        "git-overleaf.testKey", "value", &err));
   char* value_raw = nullptr;
-  ASSERT_EQ(0, git_overleaf_git_config_get(&cfg.value, repo.path(),
-                                           "git-overleaf.testKey", &value_raw,
-                                           &err));
+  ASSERT_EQ(
+      0, git_overleaf_git_config_get(&cfg.value, repo.path(),
+                                     "git-overleaf.testKey", &value_raw, &err));
   CStr value(value_raw);
   EXPECT_STREQ("value", value.get());
 
   char* repo_root_raw = nullptr;
-  ASSERT_EQ(0, git_overleaf_git_root(&cfg.value, repo.path(), &repo_root_raw,
-                                     &err));
+  ASSERT_EQ(
+      0, git_overleaf_git_root(&cfg.value, repo.path(), &repo_root_raw, &err));
   CStr repo_root(repo_root_raw);
   EXPECT_STREQ(repo.path(), repo_root.get());
 
@@ -72,12 +72,9 @@ TEST(Git, RepositoryHelpersAndSyntheticCommit) {
   ASSERT_EQ(0, git_overleaf_git_ok(&cfg.value, repo.path(), add_args, 3,
                                    nullptr, &err))
       << err.message;
-  const char* commit_args[] = {"-c",
-                               "user.name=Test User",
-                               "-c",
-                               "user.email=test@example.invalid",
-                               "commit",
-                               "-m",
+  const char* commit_args[] = {"-c",     "user.name=Test User",
+                               "-c",     "user.email=test@example.invalid",
+                               "commit", "-m",
                                "initial"};
   ASSERT_EQ(0, git_overleaf_git_ok(&cfg.value, repo.path(), commit_args, 7,
                                    nullptr, &err))
@@ -100,9 +97,9 @@ TEST(Git, RepositoryHelpersAndSyntheticCommit) {
   EXPECT_EQ(40u, strlen(head.get()));
 
   char* missing_raw = reinterpret_cast<char*>(0x1);
-  ASSERT_EQ(0, git_overleaf_git_rev_parse_verify(
-                   &cfg.value, repo.path(), "refs/missing", &missing_raw,
-                   &err));
+  ASSERT_EQ(
+      0, git_overleaf_git_rev_parse_verify(&cfg.value, repo.path(),
+                                           "refs/missing", &missing_raw, &err));
   EXPECT_EQ(nullptr, missing_raw);
 
   char* tree_raw = nullptr;
@@ -120,6 +117,21 @@ TEST(Git, RepositoryHelpersAndSyntheticCommit) {
   EXPECT_EQ(1, is_ancestor);
   ASSERT_EQ(0, git_overleaf_git_is_clean(&cfg.value, repo.path(), &err))
       << err.message;
+
+  char* materialized_raw = nullptr;
+  ASSERT_EQ(0, git_overleaf_git_materialize_commit(
+                   &cfg.value, repo.path(), "HEAD", &materialized_raw, &err))
+      << err.message;
+  CStr materialized(materialized_raw);
+  CStr materialized_file(
+      git_overleaf_path_join(materialized.get(), "main.tex"));
+  ASSERT_NE(nullptr, materialized_file);
+  char* materialized_text_raw = nullptr;
+  ASSERT_EQ(0, git_overleaf_read_file(materialized_file.get(),
+                                      &materialized_text_raw, &err));
+  CStr materialized_text(materialized_text_raw);
+  EXPECT_STREQ("hello", materialized_text.get());
+  ASSERT_EQ(0, git_overleaf_remove_tree(materialized.get(), &err));
 
   ASSERT_EQ(0, git_overleaf_git_write_metadata(&cfg.value, repo.path(), "p1",
                                                "Project One", &err))
@@ -149,9 +161,9 @@ TEST(Git, RepositoryHelpersAndSyntheticCommit) {
                                              synthetic.get(), &err))
       << err.message;
   char* base_raw = nullptr;
-  ASSERT_EQ(0, git_overleaf_git_rev_parse_verify(
-                   &cfg.value, repo.path(), GIT_OVERLEAF_BASE_REF, &base_raw,
-                   &err))
+  ASSERT_EQ(
+      0, git_overleaf_git_rev_parse_verify(
+             &cfg.value, repo.path(), GIT_OVERLEAF_BASE_REF, &base_raw, &err))
       << err.message;
   CStr base(base_raw);
   EXPECT_STREQ(synthetic.get(), base.get());
@@ -159,6 +171,24 @@ TEST(Git, RepositoryHelpersAndSyntheticCommit) {
   CStr dirty(git_overleaf_path_join(repo.path(), "dirty.txt"));
   ASSERT_NE(nullptr, dirty);
   ASSERT_EQ(0, write_text(dirty.get(), "dirty"));
+  int staged = 0;
+  int unstaged = 0;
+  int unmerged = 0;
+  ASSERT_EQ(0, git_overleaf_git_status_flags(&cfg.value, repo.path(), &staged,
+                                             &unstaged, &unmerged, &err))
+      << err.message;
+  EXPECT_EQ(0, staged);
+  EXPECT_EQ(1, unstaged);
+  EXPECT_EQ(0, unmerged);
   EXPECT_EQ(-1, git_overleaf_git_is_clean(&cfg.value, repo.path(), &err));
   ExpectContains(err.message, "repository has local changes");
+  ASSERT_EQ(0, git_overleaf_git_ok(&cfg.value, repo.path(), add_args, 3,
+                                   nullptr, &err))
+      << err.message;
+  ASSERT_EQ(0, git_overleaf_git_status_flags(&cfg.value, repo.path(), &staged,
+                                             &unstaged, &unmerged, &err))
+      << err.message;
+  EXPECT_EQ(1, staged);
+  EXPECT_EQ(0, unstaged);
+  EXPECT_EQ(0, unmerged);
 }

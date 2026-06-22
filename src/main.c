@@ -39,6 +39,8 @@ static void usage(FILE* stream) {
       "  git-overleaf-cli [GLOBAL-OPTIONS] init --project-id ID "
       "[--project-name NAME] [--repo DIR]\n"
       "  git-overleaf-cli [GLOBAL-OPTIONS] pull [--repo DIR]\n"
+      "  git-overleaf-cli [GLOBAL-OPTIONS] push [--repo DIR] [--stage]\n"
+      "  git-overleaf-cli [GLOBAL-OPTIONS] overwrite [--repo DIR] [--stage]\n"
       "\n"
       "Subcommands:\n"
       "  auth                Save or import Overleaf Cookie headers locally\n"
@@ -46,6 +48,9 @@ static void usage(FILE* stream) {
       "  clone               Download a project snapshot into a new Git repo\n"
       "  init                Bind an existing Git repo to an Overleaf project\n"
       "  pull                Merge the latest Overleaf snapshot into a repo\n"
+      "  push                Upload local HEAD to Overleaf when remote is "
+      "unchanged\n"
+      "  overwrite           Replace remote Overleaf content with local HEAD\n"
       "\n"
       "Global options:\n"
       "  --url URL            Overleaf URL (default: "
@@ -184,15 +189,17 @@ static int command_auth(GitOverleafConfig* cfg, int argc, char** argv,
                               "auth requires --cookie COOKIE or "
                               "--from-firefox");
   }
-  if (git_overleaf_write_private_file(
-          cfg->cookie_file ? cfg->cookie_file : GIT_OVERLEAF_DEFAULT_COOKIE_FILE, cookie,
-          err) != 0) {
+  if (git_overleaf_write_private_file(cfg->cookie_file
+                                          ? cfg->cookie_file
+                                          : GIT_OVERLEAF_DEFAULT_COOKIE_FILE,
+                                      cookie, err) != 0) {
     free(imported_cookie);
     return -1;
   }
-  printf("%s Overleaf cookies to %s\n",
-         from_firefox ? "Imported Firefox" : "Saved",
-         cfg->cookie_file ? cfg->cookie_file : GIT_OVERLEAF_DEFAULT_COOKIE_FILE);
+  printf(
+      "%s Overleaf cookies to %s\n",
+      from_firefox ? "Imported Firefox" : "Saved",
+      cfg->cookie_file ? cfg->cookie_file : GIT_OVERLEAF_DEFAULT_COOKIE_FILE);
   free(imported_cookie);
   return 0;
 }
@@ -263,8 +270,7 @@ static int validate_clone_target(const char* target, GitOverleafError* err) {
 }
 
 static int select_project_interactive(const GitOverleafProjectList* projects,
-                                      size_t* selected,
-                                      GitOverleafError* err) {
+                                      size_t* selected, GitOverleafError* err) {
   const size_t display_limit = 20;
   char input[512] = "";
   char query[512] = "";
@@ -279,8 +285,7 @@ static int select_project_interactive(const GitOverleafProjectList* projects,
   for (;;) {
     /* A non-numeric response after the result list becomes the next search,
        so users can narrow results without returning to the initial prompt. */
-    if (!have_query &&
-        read_prompt_line("> ", query, sizeof(query), err) != 0) {
+    if (!have_query && read_prompt_line("> ", query, sizeof(query), err) != 0) {
       return -1;
     }
     have_query = 0;
@@ -288,8 +293,7 @@ static int select_project_interactive(const GitOverleafProjectList* projects,
     if (strcmp(trimmed_query, "q") == 0 || strcmp(trimmed_query, "quit") == 0) {
       return git_overleaf_error(err, "project selection cancelled");
     }
-    if (git_overleaf_project_find_exact_id(projects, trimmed_query,
-                                           selected)) {
+    if (git_overleaf_project_find_exact_id(projects, trimmed_query, selected)) {
       return 0;
     }
 
@@ -315,8 +319,8 @@ static int select_project_interactive(const GitOverleafProjectList* projects,
     fprintf(stderr, ":\n");
     for (size_t i = 0; i < shown; i++) {
       const GitOverleafProject* project = &projects->items[matches[i].index];
-      fprintf(stderr, "%3zu  %-44.44s  %-28.28s  %.28s\n", i + 1,
-              project->name, project->owner_email, project->id);
+      fprintf(stderr, "%3zu  %-44.44s  %-28.28s  %.28s\n", i + 1, project->name,
+              project->owner_email, project->id);
     }
     fprintf(stderr, "\n");
 
@@ -513,6 +517,50 @@ static int command_pull(GitOverleafConfig* cfg, int argc, char** argv,
   return git_overleaf_overleaf_pull(cfg, repo, err);
 }
 
+static int command_push(GitOverleafConfig* cfg, int argc, char** argv,
+                        GitOverleafError* err) {
+  const char* repo = ".";
+  int stage_all = 0;
+  for (int i = 0; i < argc; i++) {
+    if (strcmp(argv[i], "--repo") == 0) {
+      if (need_value(argc, argv, i, err) != 0) {
+        return -1;
+      }
+      repo = argv[++i];
+    } else if (strcmp(argv[i], "--stage") == 0) {
+      stage_all = 1;
+    } else {
+      return git_overleaf_error(err, "unknown push option: %s", argv[i]);
+    }
+  }
+  if (git_overleaf_config_load_cookie(cfg, err) != 0) {
+    return -1;
+  }
+  return git_overleaf_overleaf_push(cfg, repo, stage_all, err);
+}
+
+static int command_overwrite(GitOverleafConfig* cfg, int argc, char** argv,
+                             GitOverleafError* err) {
+  const char* repo = ".";
+  int stage_all = 0;
+  for (int i = 0; i < argc; i++) {
+    if (strcmp(argv[i], "--repo") == 0) {
+      if (need_value(argc, argv, i, err) != 0) {
+        return -1;
+      }
+      repo = argv[++i];
+    } else if (strcmp(argv[i], "--stage") == 0) {
+      stage_all = 1;
+    } else {
+      return git_overleaf_error(err, "unknown overwrite option: %s", argv[i]);
+    }
+  }
+  if (git_overleaf_config_load_cookie(cfg, err) != 0) {
+    return -1;
+  }
+  return git_overleaf_overleaf_overwrite(cfg, repo, stage_all, err);
+}
+
 int main(int argc, char** argv) {
   GitOverleafConfig cfg;
   GitOverleafError err = {{0}};
@@ -548,12 +596,10 @@ int main(int argc, char** argv) {
     rc = command_init(&cfg, argc - index, argv + index, &err);
   } else if (strcmp(command, "pull") == 0) {
     rc = command_pull(&cfg, argc - index, argv + index, &err);
-  } else if (strcmp(command, "push") == 0 ||
-             strcmp(command, "overwrite") == 0) {
-    rc = git_overleaf_error(
-        &err,
-        "%s is not implemented in the MVP; use Emacs git-overleaf for now",
-        command);
+  } else if (strcmp(command, "push") == 0) {
+    rc = command_push(&cfg, argc - index, argv + index, &err);
+  } else if (strcmp(command, "overwrite") == 0) {
+    rc = command_overwrite(&cfg, argc - index, argv + index, &err);
   } else {
     rc = git_overleaf_error(&err, "unknown command: %s", command);
   }

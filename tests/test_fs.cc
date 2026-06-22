@@ -80,4 +80,20 @@ TEST(FileSystem, TreeOperations) {
   CStr metadata_text(metadata_text_raw);
   EXPECT_STREQ("metadata", metadata_text.get());
   EXPECT_NE(0, access(metadata.get(), F_OK));
+
+  int equal = 0;
+  CStr left(git_overleaf_path_join(root.path(), "left.txt"));
+  CStr right(git_overleaf_path_join(root.path(), "right.txt"));
+  ASSERT_NE(nullptr, left);
+  ASSERT_NE(nullptr, right);
+  ASSERT_EQ(0, write_text(left.get(), "same"));
+  ASSERT_EQ(0, write_text(right.get(), "same"));
+  ASSERT_EQ(0, git_overleaf_files_equal(left.get(), right.get(), &equal, &err));
+  EXPECT_EQ(1, equal);
+  ASSERT_EQ(0, write_text(right.get(), "different"));
+  ASSERT_EQ(0, git_overleaf_files_equal(left.get(), right.get(), &equal, &err));
+  EXPECT_EQ(0, equal);
+  ASSERT_EQ(0, unlink(right.get()));
+  ASSERT_EQ(0, git_overleaf_files_equal(left.get(), right.get(), &equal, &err));
+  EXPECT_EQ(0, equal);
 }

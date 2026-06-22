@@ -23,17 +23,16 @@ TEST(FirefoxAuth, ImportsCookieHeaderFromExplicitProfile) {
   ASSERT_NE(nullptr, db_path);
 
   time_t future = time(nullptr) + 3600;
-  CreateFirefoxCookieDb(
-      db_path.get(),
-      {{"overleaf_session2", "session-value", ".overleaf.com", "/",
-        std::to_string(static_cast<long long>(future))},
-       {"pref", "dark", "www.overleaf.com", "/project",
-        std::to_string(static_cast<long long>(future))}});
+  CreateFirefoxCookieDb(db_path.get(),
+                        {{"overleaf_session2", "session-value", ".overleaf.com",
+                          "/", std::to_string(static_cast<long long>(future))},
+                         {"pref", "dark", "www.overleaf.com", "/project",
+                          std::to_string(static_cast<long long>(future))}});
 
   ConfigGuard cfg;
   char* header_raw = nullptr;
-  ASSERT_EQ(0, git_overleaf_firefox_cookie_header(
-                   &cfg.value, profile.path(), &header_raw, &err))
+  ASSERT_EQ(0, git_overleaf_firefox_cookie_header(&cfg.value, profile.path(),
+                                                  &header_raw, &err))
       << err.message;
   CStr header(header_raw);
   ExpectContains(header.get(), "overleaf_session2=session-value");
@@ -49,17 +48,16 @@ TEST(FirefoxAuth, HandlesSelfHostedHostAndExpiredSessions) {
 
   time_t future = time(nullptr) + 3600;
   CreateFirefoxCookieDb(
-      db_path.get(),
-      {{"sharelatex_session", "self-hosted", "latex.example.edu", "/",
-        std::to_string(static_cast<long long>(future))}});
+      db_path.get(), {{"sharelatex_session", "self-hosted", "latex.example.edu",
+                       "/", std::to_string(static_cast<long long>(future))}});
 
   ConfigGuard cfg;
   free(cfg.value.url);
   cfg.value.url = git_overleaf_xstrdup("https://latex.example.edu");
   ASSERT_NE(nullptr, cfg.value.url);
   char* header_raw = nullptr;
-  ASSERT_EQ(0, git_overleaf_firefox_cookie_header(
-                   &cfg.value, profile.path(), &header_raw, &err))
+  ASSERT_EQ(0, git_overleaf_firefox_cookie_header(&cfg.value, profile.path(),
+                                                  &header_raw, &err))
       << err.message;
   CStr header(header_raw);
   ExpectContains(header.get(), "sharelatex_session=self-hosted");
@@ -69,9 +67,8 @@ TEST(FirefoxAuth, HandlesSelfHostedHostAndExpiredSessions) {
   CStr expired_db(
       git_overleaf_path_join(expired_profile.path(), "cookies.sqlite"));
   ASSERT_NE(nullptr, expired_db);
-  CreateFirefoxCookieDb(
-      expired_db.get(),
-      {{"connect.sid", "expired", ".overleaf.com", "/", "1"}});
+  CreateFirefoxCookieDb(expired_db.get(), {{"connect.sid", "expired",
+                                            ".overleaf.com", "/", "1"}});
   header_raw = nullptr;
   ASSERT_EQ(-1, git_overleaf_firefox_cookie_header(
                     nullptr, expired_profile.path(), &header_raw, &err));
@@ -83,10 +80,9 @@ TEST(FirefoxAuth, HandlesSelfHostedHostAndExpiredSessions) {
   CStr no_session_db(
       git_overleaf_path_join(no_session_profile.path(), "cookies.sqlite"));
   ASSERT_NE(nullptr, no_session_db);
-  CreateFirefoxCookieDb(
-      no_session_db.get(),
-      {{"pref", "dark", ".overleaf.com", "/",
-        std::to_string(static_cast<long long>(future))}});
+  CreateFirefoxCookieDb(no_session_db.get(),
+                        {{"pref", "dark", ".overleaf.com", "/",
+                          std::to_string(static_cast<long long>(future))}});
   ASSERT_EQ(-1, git_overleaf_firefox_cookie_header(
                     nullptr, no_session_profile.path(), &header_raw, &err));
   EXPECT_EQ(nullptr, header_raw);

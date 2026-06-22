@@ -186,7 +186,8 @@ int git_overleaf_copy_tree(const char* source, const char* destination,
     return copy_file(source, destination, st.st_mode, err);
   }
   /* Overleaf snapshots are expected to be regular files and directories.
-     Skipping special files avoids copying device nodes or following symlinks. */
+     Skipping special files avoids copying device nodes or following symlinks.
+   */
   return 0;
 }
 
@@ -347,5 +348,68 @@ int git_overleaf_delete_sync_metadata(const char* root, char** metadata_text,
                               GIT_OVERLEAF_SYNC_METADATA_FILE, strerror(saved));
   }
   free(path);
+  return 0;
+}
+
+int git_overleaf_files_equal(const char* left, const char* right, int* equal,
+                             GitOverleafError* err) {
+  *equal = 0;
+  struct stat left_st;
+  struct stat right_st;
+  if (lstat(left, &left_st) != 0) {
+    return git_overleaf_error(err, "could not inspect %s: %s", left,
+                              strerror(errno));
+  }
+  if (lstat(right, &right_st) != 0) {
+    if (errno == ENOENT) {
+      return 0;
+    }
+    return git_overleaf_error(err, "could not inspect %s: %s", right,
+                              strerror(errno));
+  }
+  if (!S_ISREG(left_st.st_mode) || !S_ISREG(right_st.st_mode)) {
+    return 0;
+  }
+  if (left_st.st_size != right_st.st_size) {
+    return 0;
+  }
+
+  FILE* left_file = fopen(left, "rb");
+  if (!left_file) {
+    return git_overleaf_error(err, "could not open %s: %s", left,
+                              strerror(errno));
+  }
+  FILE* right_file = fopen(right, "rb");
+  if (!right_file) {
+    int saved = errno;
+    fclose(left_file);
+    return git_overleaf_error(err, "could not open %s: %s", right,
+                              strerror(saved));
+  }
+
+  unsigned char left_buf[65536];
+  unsigned char right_buf[65536];
+  for (;;) {
+    size_t left_read = fread(left_buf, 1, sizeof(left_buf), left_file);
+    size_t right_read = fread(right_buf, 1, sizeof(right_buf), right_file);
+    if (left_read != right_read ||
+        (left_read > 0 && memcmp(left_buf, right_buf, left_read) != 0)) {
+      fclose(left_file);
+      fclose(right_file);
+      return 0;
+    }
+    if (left_read < sizeof(left_buf)) {
+      if (ferror(left_file) || ferror(right_file)) {
+        fclose(left_file);
+        fclose(right_file);
+        return git_overleaf_error(err, "could not compare %s and %s", left,
+                                  right);
+      }
+      break;
+    }
+  }
+  fclose(left_file);
+  fclose(right_file);
+  *equal = 1;
   return 0;
 }

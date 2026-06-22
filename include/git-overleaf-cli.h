@@ -16,7 +16,10 @@
 #ifndef GIT_OVERLEAF_CLI_H
 #define GIT_OVERLEAF_CLI_H
 
+#include <jansson.h>
 #include <stddef.h>
+
+struct curl_slist;
 
 #ifdef __cplusplus
 extern "C" {
@@ -71,6 +74,7 @@ typedef struct {
 typedef struct {
   char* temp_dir;
   char* root;
+  char* metadata_text;
 } GitOverleafSnapshot;
 
 typedef enum {
@@ -80,6 +84,26 @@ typedef enum {
   GIT_OVERLEAF_SYNC_HEAD_MATCHES_BASE,
   GIT_OVERLEAF_SYNC_DIVERGED
 } GitOverleafSyncState;
+
+typedef enum {
+  GIT_OVERLEAF_REMOTE_FOLDER,
+  GIT_OVERLEAF_REMOTE_DOC,
+  GIT_OVERLEAF_REMOTE_FILE
+} GitOverleafRemoteEntityType;
+
+typedef struct {
+  char* path;
+  char* name;
+  char* id;
+  char* parent_id;
+  GitOverleafRemoteEntityType type;
+} GitOverleafRemoteEntity;
+
+typedef struct {
+  GitOverleafRemoteEntity* items;
+  size_t len;
+  size_t cap;
+} GitOverleafRemoteTable;
 
 int git_overleaf_error(GitOverleafError* err, const char* fmt, ...);
 char* git_overleaf_xstrdup(const char* s);
@@ -145,6 +169,12 @@ int git_overleaf_git_tree_id(const GitOverleafConfig* cfg, const char* repo,
                              GitOverleafError* err);
 int git_overleaf_git_is_clean(const GitOverleafConfig* cfg, const char* repo,
                               GitOverleafError* err);
+int git_overleaf_git_status_flags(const GitOverleafConfig* cfg,
+                                  const char* repo, int* staged, int* unstaged,
+                                  int* unmerged, GitOverleafError* err);
+int git_overleaf_git_merge_in_progress(const GitOverleafConfig* cfg,
+                                       const char* repo, int* in_progress,
+                                       GitOverleafError* err);
 int git_overleaf_git_is_ancestor(const GitOverleafConfig* cfg, const char* repo,
                                  const char* ancestor, const char* descendant,
                                  int* is_ancestor, GitOverleafError* err);
@@ -152,6 +182,9 @@ int git_overleaf_git_commit_directory(const GitOverleafConfig* cfg,
                                       const char* repo, const char* directory,
                                       const char* parent, const char* message,
                                       char** commit_out, GitOverleafError* err);
+int git_overleaf_git_materialize_commit(const GitOverleafConfig* cfg,
+                                        const char* repo, const char* revision,
+                                        char** out_dir, GitOverleafError* err);
 int git_overleaf_git_write_metadata(const GitOverleafConfig* cfg,
                                     const char* repo, const char* project_id,
                                     const char* project_name,
@@ -174,13 +207,57 @@ int git_overleaf_normalize_extracted_root(const char* directory, char** out,
                                           GitOverleafError* err);
 int git_overleaf_delete_sync_metadata(const char* root, char** metadata_text,
                                       GitOverleafError* err);
+int git_overleaf_files_equal(const char* left, const char* right, int* equal,
+                             GitOverleafError* err);
 
 int git_overleaf_http_get(const GitOverleafConfig* cfg, const char* url,
                           const char* referer, GitOverleafBuffer* out,
                           GitOverleafError* err);
+int git_overleaf_http_request(const GitOverleafConfig* cfg, const char* method,
+                              const char* url, const char* referer,
+                              struct curl_slist* extra_headers,
+                              const char* body, GitOverleafBuffer* out,
+                              GitOverleafError* err);
 int git_overleaf_http_download(const GitOverleafConfig* cfg, const char* url,
                                const char* referer, const char* output_file,
                                GitOverleafError* err);
+int git_overleaf_overleaf_fetch_remote_table(const GitOverleafConfig* cfg,
+                                             const char* project_id,
+                                             GitOverleafRemoteTable* out,
+                                             GitOverleafError* err);
+int git_overleaf_overleaf_create_folder(const GitOverleafConfig* cfg,
+                                        const char* project_id,
+                                        const char* parent_id, const char* name,
+                                        char** id_out, GitOverleafError* err);
+int git_overleaf_overleaf_delete_entity(const GitOverleafConfig* cfg,
+                                        const char* project_id,
+                                        const GitOverleafRemoteEntity* entity,
+                                        GitOverleafError* err);
+int git_overleaf_overleaf_upload_file(
+    const GitOverleafConfig* cfg, const char* project_id, const char* folder_id,
+    const char* file_name, const char* file_path, char** id_out,
+    GitOverleafRemoteEntityType* type_out, GitOverleafError* err);
+int git_overleaf_overleaf_update_doc_text_content(
+    const GitOverleafConfig* cfg, const char* project_id, const char* doc_id,
+    const char* before, const char* after, GitOverleafError* err);
+void git_overleaf_remote_table_free(GitOverleafRemoteTable* table);
+GitOverleafRemoteEntity* git_overleaf_remote_table_find(
+    GitOverleafRemoteTable* table, const char* path);
+int git_overleaf_remote_table_upsert(GitOverleafRemoteTable* table,
+                                     const char* path, const char* name,
+                                     const char* id,
+                                     GitOverleafRemoteEntityType type,
+                                     const char* parent_id,
+                                     GitOverleafError* err);
+void git_overleaf_remote_table_remove(GitOverleafRemoteTable* table,
+                                      const char* path);
+void git_overleaf_remote_table_forget_prefix(GitOverleafRemoteTable* table,
+                                             const char* path);
+int git_overleaf_overleaf_parse_remote_table(json_t* root_folder,
+                                             GitOverleafRemoteTable* out,
+                                             GitOverleafError* err);
+int git_overleaf_sharejs_text_op(const char* before, const char* after,
+                                 json_t** out, GitOverleafError* err);
 
 int git_overleaf_overleaf_parse_projects_page(const char* html,
                                               GitOverleafProjectList* out,
@@ -194,10 +271,10 @@ int git_overleaf_project_find_exact_id(const GitOverleafProjectList* projects,
 int git_overleaf_project_match_query(const GitOverleafProjectList* projects,
                                      const char* query,
                                      GitOverleafProjectMatch** out,
-                                     size_t* out_len,
-                                     GitOverleafError* err);
-GitOverleafSyncState git_overleaf_overleaf_sync_state(
-    const char* base_tree, const char* head_tree, const char* remote_tree);
+                                     size_t* out_len, GitOverleafError* err);
+GitOverleafSyncState git_overleaf_overleaf_sync_state(const char* base_tree,
+                                                      const char* head_tree,
+                                                      const char* remote_tree);
 int git_overleaf_overleaf_download_snapshot(const GitOverleafConfig* cfg,
                                             const char* project_id,
                                             GitOverleafSnapshot* out,
@@ -212,6 +289,12 @@ int git_overleaf_overleaf_init(const GitOverleafConfig* cfg, const char* repo,
                                GitOverleafError* err);
 int git_overleaf_overleaf_pull(const GitOverleafConfig* cfg,
                                const char* repo_arg, GitOverleafError* err);
+int git_overleaf_overleaf_push(const GitOverleafConfig* cfg,
+                               const char* repo_arg, int stage_all,
+                               GitOverleafError* err);
+int git_overleaf_overleaf_overwrite(const GitOverleafConfig* cfg,
+                                    const char* repo_arg, int stage_all,
+                                    GitOverleafError* err);
 
 #ifdef __cplusplus
 }

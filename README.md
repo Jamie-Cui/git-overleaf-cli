@@ -1,51 +1,34 @@
 # git-overleaf-cli
 
-This repository contains an experimental native C command-line client for
-git-overleaf. It is a standalone project with its own source, build,
-configuration, and release process.
+Experimental native C CLI for `git-overleaf`.
 
-## Scope
+## What It Does
 
-Implemented in this MVP:
-
-- store a raw Overleaf Cookie header in a local file;
-- import Overleaf cookies from an existing Firefox profile;
-- list accessible Overleaf projects;
-- clone a project snapshot into a new Git repository;
-- bind an existing Git repository to an Overleaf project;
-- pull the latest Overleaf snapshot into an existing Git repository.
+- `auth`: save a raw Overleaf Cookie header or import one from Firefox
+- `list`: list projects visible to the current cookie
+- `clone`: download a project snapshot into a new Git repo
+- `init`: bind an existing Git repo to an Overleaf project
+- `pull`: merge the latest Overleaf snapshot into a repo
+- `push`: upload local Git changes when the Overleaf project is unchanged
+- `overwrite`: replace Overleaf project contents with local HEAD
 
 Not implemented yet:
 
-- webdriver/browser authentication;
-- push/overwrite;
-- Overleaf WebSocket project tree fetch;
-- ShareJS/OT text updates that preserve remote document ids.
+- webdriver/browser authentication
 
-`pull` uses only the snapshot download path, so it does not need WebSocket/OT.
-When a pull produces merge conflicts, it records an internal pending-pull state
-in Git config. Resolve the merge and commit it locally; native push/overwrite is
-not implemented yet.
-
-## Build
+## Build And Test
 
 Dependencies:
 
-- C11 compiler;
-- `cmake`;
-- `pkg-config`;
-- `libcurl`;
-- `googletest`;
-- `jansson`;
-- `sqlite3`;
-- `git`;
-- `unzip`.
-
-Check C library dependencies:
-
-```sh
-pkg-config --exists libcurl jansson sqlite3
-```
+- C11 compiler
+- `cmake`
+- `pkg-config`
+- `libcurl`
+- `googletest`
+- `jansson`
+- `sqlite3`
+- `git`
+- `unzip`
 
 Build:
 
@@ -54,30 +37,13 @@ cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build
 ```
 
-The executable is written to:
-
-```sh
-build/git-overleaf-cli
-```
-
-Check the binary:
+Run:
 
 ```sh
 ./build/git-overleaf-cli --help
 ```
 
-Clean generated build files:
-
-```sh
-cmake --build build --target clean
-```
-
-The root `Makefile` is a small compatibility wrapper around CMake, so `make`,
-`make test`, and `make clean` remain available for local use.
-
-## Test
-
-Configure, build, and run the unit tests:
+Test:
 
 ```sh
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
@@ -85,11 +51,7 @@ cmake --build build
 ctest --test-dir build --output-on-failure
 ```
 
-The tests are offline GTest tests discovered by CTest under `tests/`. They
-cover utility helpers, cookie loading precedence, filesystem operations, process
-execution, Overleaf project page parsing, and Git metadata exclude handling.
-
-To collect a local coverage summary with GCC/Clang and `gcovr`:
+Coverage:
 
 ```sh
 cmake -S . -B build-coverage \
@@ -98,27 +60,12 @@ cmake -S . -B build-coverage \
 cmake --build build-coverage --target coverage
 ```
 
-The `coverage` target runs the GTest suite through CTest, prints the gcovr
-summary, and writes `build-coverage/coverage.xml`. The normal `test` target is
-kept coverage-free so regular test runs stay fast and compiler-independent.
-
-GitHub Actions runs the CMake build, CTest suite, a CLI smoke test, and a
-coverage job on pushes and pull requests.
+The root `Makefile` is a thin wrapper around CMake, so `make`, `make test`,
+and `make clean` still work locally.
 
 ## Usage
 
-Subcommands:
-
-- `auth`: save a raw Overleaf Cookie header or import one from Firefox to a
-  local cookie file.
-- `list`: list Overleaf projects visible to the current cookie.
-- `clone`: download a project snapshot and create a new Git repository.
-- `init`: bind an existing Git repository to an Overleaf project without
-  changing its working tree.
-- `pull`: download the latest project snapshot and merge it into the bound Git
-  repository.
-
-Save cookies manually with `auth`:
+Save cookies:
 
 ```sh
 ./build/git-overleaf-cli auth \
@@ -126,98 +73,45 @@ Save cookies manually with `auth`:
   --cookie-file ~/.git-overleaf-cookies
 ```
 
-Or import cookies from the default Firefox profile after logging in to Overleaf
-in Firefox:
+Import cookies from Firefox:
 
 ```sh
 ./build/git-overleaf-cli auth --from-firefox
 ```
 
-For a self-hosted Overleaf instance, pass `--url` before `auth` so the Firefox
-importer selects cookies for that host:
-
-```sh
-./build/git-overleaf-cli --url https://latex.example.edu auth --from-firefox
-```
-
-To bypass Firefox profile discovery:
-
-```sh
-./build/git-overleaf-cli auth \
-  --from-firefox \
-  --firefox-profile /path/to/firefox/profile
-```
-
-The Firefox importer reads Firefox `profiles.ini`, prefers the active
-`[Install...]` default profile, copies `cookies.sqlite` plus readable `-wal` and
-`-shm` sidecar files to a temporary directory, and imports only non-expired
-cookies for the configured Overleaf host. It fails if no valid Overleaf session
-cookie is present.
-
-List accessible projects with `list`:
-
-```sh
-./build/git-overleaf-cli list
-```
-
-Create a new local repository from a project snapshot with `clone`:
-
-```sh
-./build/git-overleaf-cli clone ./project-name
-```
-
-When `clone` runs in an interactive terminal without `--project-id`, it fetches
-the visible project list and prompts for a project search. Enter search terms to
-match by project name, owner email, or project id, then choose one of the first
-20 displayed matches. If the target path is omitted, it is derived from the
-selected project name using lowercase words separated by `-`. In
-non-interactive contexts, pass `--project-id`. The target path must not exist or
-must be an empty directory.
-
-Clone by project id:
-
-```sh
-./build/git-overleaf-cli clone \
-  --project-id PROJECT_ID \
-  --project-name 'Project Name' \
-  ./project-name
-```
-
-When cloning by project id, `TARGET` can be omitted if `--project-name` is
-provided. If both `TARGET` and `--project-name` are omitted, the CLI tries to
-resolve the project name from the visible project list before deriving the
-target directory:
-
-```sh
-./build/git-overleaf-cli clone \
-  --project-id PROJECT_ID \
-  --project-name 'Project Name'
-```
-
-Record project metadata in an existing repository with `init`:
-
-```sh
-./build/git-overleaf-cli init \
-  --project-id PROJECT_ID \
-  --project-name 'Project Name' \
-  --repo /path/to/repo
-```
-
-Fetch and merge remote Overleaf changes with `pull`:
-
-```sh
-./build/git-overleaf-cli pull --repo /path/to/repo
-```
-
-Use `--url` before any subcommand to target a self-hosted Overleaf instance:
+Target a self-hosted Overleaf instance:
 
 ```sh
 ./build/git-overleaf-cli --url https://latex.example.edu list
 ```
 
-## Repository Metadata
+Clone a project:
 
-The CLI stores its repository metadata in these Git config keys:
+```sh
+./build/git-overleaf-cli clone --project-id PROJECT_ID --project-name 'Project Name'
+```
+
+Bind or pull an existing repo:
+
+```sh
+./build/git-overleaf-cli init --project-id PROJECT_ID --repo /path/to/repo
+./build/git-overleaf-cli pull --repo /path/to/repo
+```
+
+Push or explicitly overwrite Overleaf from a bound repo:
+
+```sh
+./build/git-overleaf-cli push --repo /path/to/repo
+./build/git-overleaf-cli overwrite --repo /path/to/repo
+```
+
+## Notes
+
+The Firefox importer reads `profiles.ini`, copies `cookies.sqlite` plus any
+readable `-wal` / `-shm` sidecar files to a temporary directory, and imports
+only valid Overleaf session cookies for the configured host.
+
+Repository metadata lives in local Git config:
 
 - `git-overleaf.projectId`
 - `git-overleaf.projectName`
@@ -226,29 +120,11 @@ The CLI stores its repository metadata in these Git config keys:
 - `git-overleaf.pendingAction`
 - `git-overleaf.pendingRemoteCommit`
 
-It uses this base ref:
-
-```text
-refs/git-overleaf/base
-```
-
-The reserved remote metadata file remains:
-
-```text
-.git-overleaf-sync.json
-```
-
-Downloaded snapshots remove that file before local Git comparisons.
-
-## Development Notes
-
-Shared C structs and public types use the `GitOverleaf*` prefix, for example
-`GitOverleafConfig` and `GitOverleafError`. Project constants use the
-`GIT_OVERLEAF_*` prefix. Public helper functions keep the `git_overleaf_`
-prefix and are declared in `include/git-overleaf-cli.h`.
+The reserved sync base ref is `refs/git-overleaf/base`, and the internal
+metadata file `.git-overleaf-sync.json` is removed from downloaded snapshots
+before Git comparisons.
 
 ## Security
 
-The cookie file contains account-bearing Overleaf session cookies.  The `auth`
-command writes it with mode `0600`, but users should still keep it outside Git
-repositories and avoid pasting real cookies into logs or issue reports.
+The cookie file contains live Overleaf session credentials. `auth` writes it
+with mode `0600`, but it should still stay outside Git repositories and logs.

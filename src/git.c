@@ -46,7 +46,8 @@ static char** build_git_argv(const GitOverleafConfig* cfg, const char* repo,
 int git_overleaf_git_capture(const GitOverleafConfig* cfg, const char* repo,
                              const char* const args[], size_t argc,
                              char* const env[], int allow_failure,
-                             GitOverleafProcessResult* out, GitOverleafError* err) {
+                             GitOverleafProcessResult* out,
+                             GitOverleafError* err) {
   char** argv = build_git_argv(cfg, repo, args, argc);
   if (!argv) {
     return git_overleaf_error(err, "out of memory");
@@ -128,8 +129,9 @@ int git_overleaf_git_root(const GitOverleafConfig* cfg, const char* directory,
   return 0;
 }
 
-int git_overleaf_git_current_branch(const GitOverleafConfig* cfg, const char* repo,
-                                    char** out, GitOverleafError* err) {
+int git_overleaf_git_current_branch(const GitOverleafConfig* cfg,
+                                    const char* repo, char** out,
+                                    GitOverleafError* err) {
   const char* args[] = {"branch", "--show-current"};
   if (git_overleaf_git_output(cfg, repo, args, 2, NULL, out, err) != 0) {
     return -1;
@@ -149,9 +151,9 @@ int git_overleaf_git_rev_parse(const GitOverleafConfig* cfg, const char* repo,
   return git_overleaf_git_output(cfg, repo, args, 2, NULL, out, err);
 }
 
-int git_overleaf_git_rev_parse_verify(const GitOverleafConfig* cfg, const char* repo,
-                                      const char* revision, char** out,
-                                      GitOverleafError* err) {
+int git_overleaf_git_rev_parse_verify(const GitOverleafConfig* cfg,
+                                      const char* repo, const char* revision,
+                                      char** out, GitOverleafError* err) {
   const char* args[] = {"rev-parse", "--verify", revision};
   GitOverleafProcessResult result;
   /* The base ref is optional during first-time init, so verification failure
@@ -187,17 +189,74 @@ int git_overleaf_git_tree_id(const GitOverleafConfig* cfg, const char* repo,
 
 int git_overleaf_git_is_clean(const GitOverleafConfig* cfg, const char* repo,
                               GitOverleafError* err) {
+  int staged = 0;
+  int unstaged = 0;
+  int unmerged = 0;
+  if (git_overleaf_git_status_flags(cfg, repo, &staged, &unstaged, &unmerged,
+                                    err) != 0) {
+    return -1;
+  }
+  if (staged || unstaged || unmerged) {
+    return git_overleaf_error(
+        err, "repository has local changes; commit or stash them first");
+  }
+  return 0;
+}
+
+int git_overleaf_git_status_flags(const GitOverleafConfig* cfg,
+                                  const char* repo, int* staged, int* unstaged,
+                                  int* unmerged, GitOverleafError* err) {
+  *staged = 0;
+  *unstaged = 0;
+  *unmerged = 0;
   const char* args[] = {"status", "--porcelain"};
   char* out = NULL;
   if (git_overleaf_git_output(cfg, repo, args, 2, NULL, &out, err) != 0) {
     return -1;
   }
-  int clean = !out || !*out;
-  free(out);
-  if (!clean) {
-    return git_overleaf_error(
-        err, "repository has local changes; commit or stash them first");
+  for (char* line = out; line && *line;) {
+    char* next = strchr(line, '\n');
+    if (next) {
+      *next++ = '\0';
+    }
+    if (strlen(line) >= 2) {
+      char index_status = line[0];
+      char worktree_status = line[1];
+      if ((index_status == 'D' && worktree_status == 'D') ||
+          (index_status == 'A' && worktree_status == 'U') ||
+          (index_status == 'U' && worktree_status == 'D') ||
+          (index_status == 'U' && worktree_status == 'A') ||
+          (index_status == 'D' && worktree_status == 'U') ||
+          (index_status == 'A' && worktree_status == 'A') ||
+          (index_status == 'U' && worktree_status == 'U')) {
+        *unmerged = 1;
+      }
+      if (index_status != ' ' && index_status != '?') {
+        *staged = 1;
+      }
+      if ((index_status == '?' && worktree_status == '?') ||
+          (worktree_status != ' ' && worktree_status != '?')) {
+        *unstaged = 1;
+      }
+    }
+    line = next;
   }
+  free(out);
+  return 0;
+}
+
+int git_overleaf_git_merge_in_progress(const GitOverleafConfig* cfg,
+                                       const char* repo, int* in_progress,
+                                       GitOverleafError* err) {
+  *in_progress = 0;
+  const char* args[] = {"rev-parse", "--verify", "MERGE_HEAD"};
+  GitOverleafProcessResult result;
+  if (git_overleaf_git_capture(cfg, repo, args, 3, NULL, 1, &result, err) !=
+      0) {
+    return -1;
+  }
+  *in_progress = result.status == 0;
+  git_overleaf_process_result_free(&result);
   return 0;
 }
 
@@ -247,9 +306,10 @@ static int git_identity_args(const GitOverleafConfig* cfg, const char* repo,
   return 0;
 }
 
-int git_overleaf_git_commit_directory(const GitOverleafConfig* cfg, const char* repo,
-                                      const char* directory, const char* parent,
-                                      const char* message, char** commit_out,
+int git_overleaf_git_commit_directory(const GitOverleafConfig* cfg,
+                                      const char* repo, const char* directory,
+                                      const char* parent, const char* message,
+                                      char** commit_out,
                                       GitOverleafError* err) {
   *commit_out = NULL;
   char* index_file = NULL;
@@ -337,8 +397,65 @@ int git_overleaf_git_commit_directory(const GitOverleafConfig* cfg, const char* 
   return rc;
 }
 
-int git_overleaf_git_write_metadata(const GitOverleafConfig* cfg, const char* repo,
-                                    const char* project_id,
+int git_overleaf_git_materialize_commit(const GitOverleafConfig* cfg,
+                                        const char* repo, const char* revision,
+                                        char** out_dir, GitOverleafError* err) {
+  *out_dir = NULL;
+  char* temp_dir = NULL;
+  char* index_file = NULL;
+  if (git_overleaf_make_temp_dir(&temp_dir, err) != 0 ||
+      git_overleaf_make_temp_file(&index_file, err) != 0) {
+    free(temp_dir);
+    free(index_file);
+    return -1;
+  }
+  unlink(index_file);
+
+  size_t env_len = strlen("GIT_INDEX_FILE=") + strlen(index_file) + 1;
+  char* env_index = malloc(env_len);
+  if (!env_index) {
+    git_overleaf_remove_tree(temp_dir, err);
+    free(temp_dir);
+    free(index_file);
+    return git_overleaf_error(err, "out of memory");
+  }
+  snprintf(env_index, env_len, "GIT_INDEX_FILE=%s", index_file);
+  char* env[] = {env_index, NULL};
+
+  size_t prefix_len = strlen("--prefix=") + strlen(temp_dir) + 2;
+  char* prefix = malloc(prefix_len);
+  if (!prefix) {
+    git_overleaf_remove_tree(temp_dir, err);
+    free(env_index);
+    free(temp_dir);
+    free(index_file);
+    return git_overleaf_error(err, "out of memory");
+  }
+  snprintf(prefix, prefix_len, "--prefix=%s/", temp_dir);
+
+  const char* read_tree_args[] = {"read-tree", revision};
+  const char* checkout_args[] = {"checkout-index", "-a", "-f", prefix};
+  if (git_overleaf_git_ok(cfg, repo, read_tree_args, 2, env, err) != 0 ||
+      git_overleaf_git_ok(cfg, repo, checkout_args, 4, env, err) != 0) {
+    git_overleaf_remove_tree(temp_dir, err);
+    free(prefix);
+    free(env_index);
+    free(temp_dir);
+    unlink(index_file);
+    free(index_file);
+    return -1;
+  }
+
+  free(prefix);
+  free(env_index);
+  unlink(index_file);
+  free(index_file);
+  *out_dir = temp_dir;
+  return 0;
+}
+
+int git_overleaf_git_write_metadata(const GitOverleafConfig* cfg,
+                                    const char* repo, const char* project_id,
                                     const char* project_name,
                                     GitOverleafError* err) {
   char* url = git_overleaf_sanitize_url(cfg->url);
@@ -359,8 +476,9 @@ int git_overleaf_git_write_metadata(const GitOverleafConfig* cfg, const char* re
   return rc ? -1 : 0;
 }
 
-int git_overleaf_git_set_base_ref(const GitOverleafConfig* cfg, const char* repo,
-                                  const char* revision, GitOverleafError* err) {
+int git_overleaf_git_set_base_ref(const GitOverleafConfig* cfg,
+                                  const char* repo, const char* revision,
+                                  GitOverleafError* err) {
   char* base_ref = NULL;
   if (git_overleaf_git_config_get(cfg, repo, "git-overleaf.baseRef", &base_ref,
                                   err) != 0) {
@@ -408,7 +526,8 @@ int git_overleaf_git_prepare_sync_metadata_repo(const char* repo,
       return git_overleaf_error(err, "out of memory");
     }
     for (char* line = strtok(copy, "\n"); line; line = strtok(NULL, "\n")) {
-      if (strcmp(git_overleaf_trim(line), GIT_OVERLEAF_SYNC_METADATA_FILE) == 0) {
+      if (strcmp(git_overleaf_trim(line), GIT_OVERLEAF_SYNC_METADATA_FILE) ==
+          0) {
         present = 1;
         break;
       }

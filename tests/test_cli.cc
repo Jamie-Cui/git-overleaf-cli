@@ -22,6 +22,7 @@ TEST(Cli, HelpAndArgumentErrors) {
   EXPECT_EQ(0, result.value.status);
   ExpectContains(result.value.output, "Usage:");
   ExpectContains(result.value.output, "clone [--project-id ID]");
+  ExpectContains(result.value.output, "push [--repo DIR] [--stage]");
   git_overleaf_process_result_free(&result.value);
 
   RunCli({}, nullptr, &result.value);
@@ -37,6 +38,16 @@ TEST(Cli, HelpAndArgumentErrors) {
   RunCli({"unknown"}, nullptr, &result.value);
   EXPECT_EQ(1, result.value.status);
   ExpectContains(result.value.output, "unknown command");
+  git_overleaf_process_result_free(&result.value);
+
+  RunCli({"push", "--unknown"}, nullptr, &result.value);
+  EXPECT_EQ(1, result.value.status);
+  ExpectContains(result.value.output, "unknown push option");
+  git_overleaf_process_result_free(&result.value);
+
+  RunCli({"overwrite", "--unknown"}, nullptr, &result.value);
+  EXPECT_EQ(1, result.value.status);
+  ExpectContains(result.value.output, "unknown overwrite option");
 }
 
 TEST(Cli, AuthWritesCookieAndRejectsConflicts) {
@@ -62,8 +73,7 @@ TEST(Cli, AuthWritesCookieAndRejectsConflicts) {
   EXPECT_EQ(0600, static_cast<int>(st.st_mode & 0777));
   git_overleaf_process_result_free(&result.value);
 
-  RunCli({"--cookie", "a=b", "auth", "--from-firefox"}, nullptr,
-         &result.value);
+  RunCli({"--cookie", "a=b", "auth", "--from-firefox"}, nullptr, &result.value);
   EXPECT_EQ(1, result.value.status);
   ExpectContains(result.value.output,
                  "auth accepts either --cookie or --from-firefox");
@@ -97,14 +107,13 @@ TEST(Cli, CloneValidatesBeforeNetwork) {
   ExpectContains(result.value.output, "unknown clone option");
   git_overleaf_process_result_free(&result.value);
 
-  RunCli({"clone", "--project-id", "p1", "--project-name", "---"},
-         root.path(), &result.value);
+  RunCli({"clone", "--project-id", "p1", "--project-name", "---"}, root.path(),
+         &result.value);
   EXPECT_EQ(1, result.value.status);
   ExpectContains(result.value.output, "cannot derive clone target");
   git_overleaf_process_result_free(&result.value);
 
-  RunCli({"clone", "--project-id", "p1", "--project-name",
-          "My Test Project"},
+  RunCli({"clone", "--project-id", "p1", "--project-name", "My Test Project"},
          root.path(), &result.value);
   EXPECT_EQ(1, result.value.status);
   ExpectContains(result.value.output,

@@ -46,7 +46,8 @@ static char* format_command(char* const argv[]) {
 
 int git_overleaf_process_run(char* const argv[], const char* cwd,
                              char* const env[], int allow_failure,
-                             GitOverleafProcessResult* out, GitOverleafError* err) {
+                             GitOverleafProcessResult* out,
+                             GitOverleafError* err) {
   memset(out, 0, sizeof(*out));
   int pipefd[2];
   if (pipe(pipefd) != 0) {

@@ -21,9 +21,7 @@
 
 #include "git-overleaf-cli.h"
 
-static int ci_char(int c) {
-  return tolower((unsigned char)c);
-}
+static int ci_char(int c) { return tolower((unsigned char)c); }
 
 static int ci_starts_with(const char* text, const char* prefix) {
   if (!text || !prefix) {
@@ -126,8 +124,7 @@ static int project_match_score(const GitOverleafProject* project,
   if (project_field_has_all_tokens(project->id, tokens, token_count)) {
     return 25;
   }
-  if (project_field_has_all_tokens(project->owner_email, tokens,
-                                   token_count)) {
+  if (project_field_has_all_tokens(project->owner_email, tokens, token_count)) {
     return 30;
   }
   return 40;
@@ -167,8 +164,7 @@ int git_overleaf_project_find_exact_id(const GitOverleafProjectList* projects,
 int git_overleaf_project_match_query(const GitOverleafProjectList* projects,
                                      const char* query,
                                      GitOverleafProjectMatch** out,
-                                     size_t* out_len,
-                                     GitOverleafError* err) {
+                                     size_t* out_len, GitOverleafError* err) {
   *out = NULL;
   *out_len = 0;
   if (!projects) {
@@ -183,8 +179,7 @@ int git_overleaf_project_match_query(const GitOverleafProjectList* projects,
   size_t token_count =
       tokenize_query(trimmed, tokens, sizeof(tokens) / sizeof(tokens[0]));
 
-  GitOverleafProjectMatch* matches =
-      calloc(projects->len, sizeof(*matches));
+  GitOverleafProjectMatch* matches = calloc(projects->len, sizeof(*matches));
   if (!matches && projects->len > 0) {
     free(trimmed);
     return git_overleaf_error(err, "out of memory");
@@ -192,8 +187,8 @@ int git_overleaf_project_match_query(const GitOverleafProjectList* projects,
 
   size_t match_count = 0;
   for (size_t i = 0; i < projects->len; i++) {
-    int score = project_match_score(&projects->items[i], trimmed, tokens,
-                                    token_count);
+    int score =
+        project_match_score(&projects->items[i], trimmed, tokens, token_count);
     if (score >= 0) {
       matches[match_count].index = i;
       matches[match_count].score = score;

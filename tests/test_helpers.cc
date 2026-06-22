@@ -153,8 +153,8 @@ static void ExecSql(sqlite3* db, const char* sql) {
   sqlite3_free(error);
 }
 
-void CreateFirefoxCookieDb(
-    const char* path, const std::vector<std::vector<std::string>>& rows) {
+void CreateFirefoxCookieDb(const char* path,
+                           const std::vector<std::vector<std::string>>& rows) {
   sqlite3* db = nullptr;
   ASSERT_EQ(SQLITE_OK, sqlite3_open(path, &db));
   ASSERT_NE(nullptr, db);
@@ -162,12 +162,11 @@ void CreateFirefoxCookieDb(
           "create table moz_cookies ("
           "name text, value text, host text, path text, expiry integer)");
   sqlite3_stmt* stmt = nullptr;
-  ASSERT_EQ(SQLITE_OK,
-            sqlite3_prepare_v2(db,
-                               "insert into moz_cookies "
-                               "(name, value, host, path, expiry) "
-                               "values (?, ?, ?, ?, ?)",
-                               -1, &stmt, nullptr));
+  ASSERT_EQ(SQLITE_OK, sqlite3_prepare_v2(db,
+                                          "insert into moz_cookies "
+                                          "(name, value, host, path, expiry) "
+                                          "values (?, ?, ?, ?, ?)",
+                                          -1, &stmt, nullptr));
   ASSERT_NE(nullptr, stmt);
   for (const auto& row : rows) {
     ASSERT_EQ(5u, row.size());
@@ -181,10 +180,9 @@ void CreateFirefoxCookieDb(
               sqlite3_bind_text(stmt, 3, row[2].c_str(), -1, SQLITE_TRANSIENT));
     ASSERT_EQ(SQLITE_OK,
               sqlite3_bind_text(stmt, 4, row[3].c_str(), -1, SQLITE_TRANSIENT));
-    ASSERT_EQ(SQLITE_OK,
-              sqlite3_bind_int64(stmt, 5,
-                                 static_cast<sqlite3_int64>(strtoll(
-                                     row[4].c_str(), nullptr, 10))));
+    ASSERT_EQ(SQLITE_OK, sqlite3_bind_int64(stmt, 5,
+                                            static_cast<sqlite3_int64>(strtoll(
+                                                row[4].c_str(), nullptr, 10))));
     ASSERT_EQ(SQLITE_DONE, sqlite3_step(stmt));
   }
   sqlite3_finalize(stmt);

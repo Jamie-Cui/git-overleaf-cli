@@ -65,8 +65,8 @@ TEST(Overleaf, EarlyValidationPathsAvoidNetwork) {
   ASSERT_NE(nullptr, file);
   ASSERT_EQ(0, write_text(file.get(), "existing"));
 
-  ASSERT_EQ(-1, git_overleaf_overleaf_clone(
-                    &cfg.value, "p1", "Project", target.get(), &err));
+  ASSERT_EQ(-1, git_overleaf_overleaf_clone(&cfg.value, "p1", "Project",
+                                            target.get(), &err));
   ExpectContains(err.message, "target directory is not empty");
 
   ASSERT_EQ(-1, git_overleaf_overleaf_init(&cfg.value, root.path(), "p1",
@@ -93,12 +93,9 @@ TEST(Overleaf, PullPreflightFailuresBeforeDownload) {
   ASSERT_EQ(0, git_overleaf_git_ok(&cfg.value, repo.path(), add_args, 3,
                                    nullptr, &err))
       << err.message;
-  const char* commit_args[] = {"-c",
-                               "user.name=Test User",
-                               "-c",
-                               "user.email=test@example.invalid",
-                               "commit",
-                               "-m",
+  const char* commit_args[] = {"-c",     "user.name=Test User",
+                               "-c",     "user.email=test@example.invalid",
+                               "commit", "-m",
                                "initial"};
   ASSERT_EQ(0, git_overleaf_git_ok(&cfg.value, repo.path(), commit_args, 7,
                                    nullptr, &err))
@@ -119,8 +116,8 @@ TEST(Overleaf, PullPreflightFailuresBeforeDownload) {
 
   ASSERT_EQ(0, unlink(dirty.get()));
   ASSERT_EQ(0, git_overleaf_git_config_set(&cfg.value, repo.path(),
-                                           "git-overleaf.pendingAction",
-                                           "pull", &err));
+                                           "git-overleaf.pendingAction", "pull",
+                                           &err));
   ASSERT_EQ(-1, git_overleaf_overleaf_pull(&cfg.value, repo.path(), &err));
   ExpectContains(err.message, "unresolved pending Overleaf pull");
 }

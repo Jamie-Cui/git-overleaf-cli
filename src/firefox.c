@@ -580,7 +580,8 @@ static int cookie_host_candidates(const char* url, char*** out_items,
     return -1;
   }
   /* Firefox stores domain cookies both as exact hosts and dotted parent
-     domains; include parent suffixes for hosted/self-hosted Overleaf domains. */
+     domains; include parent suffixes for hosted/self-hosted Overleaf domains.
+   */
   for (const char* dot = strchr(host, '.'); dot; dot = strchr(dot + 1, '.')) {
     const char* suffix = dot + 1;
     if (strchr(suffix, '.')) {

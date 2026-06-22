@@ -96,5 +96,5 @@ void RunCommand(const std::vector<std::string>& args, const char* cwd,
                 int allow_failure, GitOverleafProcessResult* result);
 void RunCli(const std::vector<std::string>& args, const char* cwd,
             GitOverleafProcessResult* result);
-void CreateFirefoxCookieDb(
-    const char* path, const std::vector<std::vector<std::string>>& rows);
+void CreateFirefoxCookieDb(const char* path,
+                           const std::vector<std::vector<std::string>>& rows);

@@ -51,9 +51,9 @@ TEST(Projects, FindsExactIdsAndRanksMatches) {
   free(matches);
 
   matches = nullptr;
-  ASSERT_EQ(0, git_overleaf_project_match_query(
-                   &projects.value, "draft paper@example.com", &matches,
-                   &match_count, &err));
+  ASSERT_EQ(0, git_overleaf_project_match_query(&projects.value,
+                                                "draft paper@example.com",
+                                                &matches, &match_count, &err));
   ASSERT_NE(nullptr, matches);
   ASSERT_EQ(1u, match_count);
   EXPECT_EQ(4u, matches[0].index);
@@ -95,8 +95,7 @@ TEST(Projects, MatchesLargeListsWithoutFzf) {
     projects.Set(i, id, name, owner);
   }
   free(projects.value.items[42].name);
-  projects.value.items[42].name =
-      git_overleaf_xstrdup("Compiler Quantum Plan");
+  projects.value.items[42].name = git_overleaf_xstrdup("Compiler Quantum Plan");
   ASSERT_NE(nullptr, projects.value.items[42].name);
   free(projects.value.items[777].name);
   projects.value.items[777].name =
@@ -108,9 +107,9 @@ TEST(Projects, MatchesLargeListsWithoutFzf) {
 
   GitOverleafProjectMatch* matches = nullptr;
   size_t match_count = 0;
-  ASSERT_EQ(0, git_overleaf_project_match_query(&projects.value,
-                                                "quantum compiler", &matches,
-                                                &match_count, &err));
+  ASSERT_EQ(
+      0, git_overleaf_project_match_query(&projects.value, "quantum compiler",
+                                          &matches, &match_count, &err));
   ASSERT_NE(nullptr, matches);
   ASSERT_EQ(3u, match_count);
   EXPECT_EQ(777u, matches[0].index);
