@@ -1,6 +1,6 @@
 # git-overleaf-cli
 
-This directory contains an experimental native C command-line client for
+This repository contains an experimental native C command-line client for
 git-overleaf.  It is intentionally separate from the Emacs package files and is
 not meant to be included in the MELPA package recipe.
 
@@ -41,13 +41,25 @@ Dependencies:
 Build:
 
 ```sh
-make -C cli
+make
 ```
 
 The executable is written to:
 
 ```sh
-cli/build/git-overleaf-cli
+build/git-overleaf-cli
+```
+
+Check the binary:
+
+```sh
+./build/git-overleaf-cli --help
+```
+
+Clean generated build files:
+
+```sh
+make clean
 ```
 
 ## Usage
@@ -55,7 +67,7 @@ cli/build/git-overleaf-cli
 Save cookies manually:
 
 ```sh
-cli/build/git-overleaf-cli auth \
+./build/git-overleaf-cli auth \
   --cookie 'connect.sid=...; overleaf_session=...' \
   --cookie-file ~/.git-overleaf-cookies
 ```
@@ -63,13 +75,13 @@ cli/build/git-overleaf-cli auth \
 List projects:
 
 ```sh
-cli/build/git-overleaf-cli list
+./build/git-overleaf-cli list
 ```
 
 Clone by project id:
 
 ```sh
-cli/build/git-overleaf-cli clone \
+./build/git-overleaf-cli clone \
   --project-id PROJECT_ID \
   --project-name 'Project Name' \
   ./project-name
@@ -78,7 +90,7 @@ cli/build/git-overleaf-cli clone \
 Bind an existing Git repository without changing its working tree:
 
 ```sh
-cli/build/git-overleaf-cli init \
+./build/git-overleaf-cli init \
   --project-id PROJECT_ID \
   --project-name 'Project Name' \
   --repo /path/to/repo
@@ -87,13 +99,13 @@ cli/build/git-overleaf-cli init \
 Pull remote Overleaf changes:
 
 ```sh
-cli/build/git-overleaf-cli pull --repo /path/to/repo
+./build/git-overleaf-cli pull --repo /path/to/repo
 ```
 
 Use a self-hosted Overleaf URL:
 
 ```sh
-cli/build/git-overleaf-cli --url https://latex.example.edu list
+./build/git-overleaf-cli --url https://latex.example.edu list
 ```
 
 ## Compatibility
