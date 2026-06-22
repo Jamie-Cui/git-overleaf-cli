@@ -27,7 +27,7 @@
 
 #include "git-overleaf-cli.h"
 
-int git_overleaf_error(GoError* err, const char* fmt, ...) {
+int git_overleaf_error(GitOverleafError* err, const char* fmt, ...) {
   if (err) {
     va_list ap;
     va_start(ap, fmt);
@@ -130,7 +130,8 @@ char* git_overleaf_path_join(const char* left, const char* right) {
 }
 
 char* git_overleaf_url_join(const char* base, const char* path) {
-  char* sanitized = git_overleaf_sanitize_url(base ? base : GO_DEFAULT_URL);
+  char* sanitized =
+      git_overleaf_sanitize_url(base ? base : GIT_OVERLEAF_DEFAULT_URL);
   if (!sanitized) {
     return NULL;
   }
@@ -153,7 +154,7 @@ char* git_overleaf_url_join(const char* base, const char* path) {
 }
 
 char* git_overleaf_sanitize_url(const char* url) {
-  char* copy = git_overleaf_trimmed_dup(url ? url : GO_DEFAULT_URL);
+  char* copy = git_overleaf_trimmed_dup(url ? url : GIT_OVERLEAF_DEFAULT_URL);
   if (!copy) {
     return NULL;
   }
@@ -164,8 +165,51 @@ char* git_overleaf_sanitize_url(const char* url) {
   return copy;
 }
 
+char* git_overleaf_project_directory_name(const char* name,
+                                          GitOverleafError* err) {
+  char* copy = git_overleaf_trimmed_dup(name ? name : "");
+  if (!copy) {
+    git_overleaf_error(err, "out of memory");
+    return NULL;
+  }
+
+  size_t len = strlen(copy);
+  char* out = malloc(len + 1);
+  if (!out) {
+    free(copy);
+    git_overleaf_error(err, "out of memory");
+    return NULL;
+  }
+
+  size_t j = 0;
+  int last_dash = 1;
+  for (size_t i = 0; i < len; i++) {
+    unsigned char c = (unsigned char)copy[i];
+    if (isalnum(c)) {
+      out[j++] = (char)tolower(c);
+      last_dash = 0;
+    } else if (!last_dash) {
+      out[j++] = '-';
+      last_dash = 1;
+    }
+  }
+  while (j > 0 && out[j - 1] == '-') {
+    j--;
+  }
+  out[j] = '\0';
+  free(copy);
+
+  if (!*out) {
+    free(out);
+    git_overleaf_error(
+        err, "cannot derive clone target from empty project name");
+    return NULL;
+  }
+  return out;
+}
+
 int git_overleaf_write_private_file(const char* path, const char* text,
-                                    GoError* err) {
+                                    GitOverleafError* err) {
   char* expanded = git_overleaf_expand_home(path);
   if (!expanded) {
     return git_overleaf_error(err, "out of memory");
@@ -197,7 +241,8 @@ int git_overleaf_write_private_file(const char* path, const char* text,
   return 0;
 }
 
-int git_overleaf_read_file(const char* path, char** out, GoError* err) {
+int git_overleaf_read_file(const char* path, char** out,
+                           GitOverleafError* err) {
   *out = NULL;
   char* expanded = git_overleaf_expand_home(path);
   if (!expanded) {
@@ -249,7 +294,7 @@ int git_overleaf_read_file(const char* path, char** out, GoError* err) {
   return 0;
 }
 
-void git_overleaf_buffer_free(GoBuffer* buffer) {
+void git_overleaf_buffer_free(GitOverleafBuffer* buffer) {
   if (buffer) {
     free(buffer->data);
     buffer->data = NULL;
@@ -257,15 +302,15 @@ void git_overleaf_buffer_free(GoBuffer* buffer) {
   }
 }
 
-void git_overleaf_config_init(GoConfig* cfg) {
+void git_overleaf_config_init(GitOverleafConfig* cfg) {
   memset(cfg, 0, sizeof(*cfg));
-  cfg->url = git_overleaf_xstrdup(GO_DEFAULT_URL);
-  cfg->cookie_file = git_overleaf_xstrdup(GO_DEFAULT_COOKIE_FILE);
+  cfg->url = git_overleaf_xstrdup(GIT_OVERLEAF_DEFAULT_URL);
+  cfg->cookie_file = git_overleaf_xstrdup(GIT_OVERLEAF_DEFAULT_COOKIE_FILE);
   cfg->git = git_overleaf_xstrdup("git");
   cfg->unzip = git_overleaf_xstrdup("unzip");
 }
 
-void git_overleaf_config_free(GoConfig* cfg) {
+void git_overleaf_config_free(GitOverleafConfig* cfg) {
   if (!cfg) {
     return;
   }
@@ -277,7 +322,8 @@ void git_overleaf_config_free(GoConfig* cfg) {
   memset(cfg, 0, sizeof(*cfg));
 }
 
-int git_overleaf_config_load_cookie(GoConfig* cfg, GoError* err) {
+int git_overleaf_config_load_cookie(GitOverleafConfig* cfg,
+                                    GitOverleafError* err) {
   if (cfg->cookie && *git_overleaf_trim(cfg->cookie)) {
     return 0;
   }
@@ -290,7 +336,7 @@ int git_overleaf_config_load_cookie(GoConfig* cfg, GoError* err) {
   }
 
   const char* cookie_file =
-      cfg->cookie_file ? cfg->cookie_file : GO_DEFAULT_COOKIE_FILE;
+      cfg->cookie_file ? cfg->cookie_file : GIT_OVERLEAF_DEFAULT_COOKIE_FILE;
   char* text = NULL;
   if (git_overleaf_read_file(cookie_file, &text, err) != 0) {
     return -1;

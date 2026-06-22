@@ -27,7 +27,7 @@
 static size_t write_buffer_cb(char* ptr, size_t size, size_t nmemb,
                               void* userdata) {
   size_t total = size * nmemb;
-  GoBuffer* buffer = userdata;
+  GitOverleafBuffer* buffer = userdata;
   char* next = realloc(buffer->data, buffer->len + total + 1);
   if (!next) {
     return 0;
@@ -44,8 +44,9 @@ static size_t write_file_cb(char* ptr, size_t size, size_t nmemb,
   return fwrite(ptr, size, nmemb, userdata);
 }
 
-static struct curl_slist* build_headers(const GoConfig* cfg,
-                                        const char* referer, GoError* err) {
+static struct curl_slist* build_headers(const GitOverleafConfig* cfg,
+                                        const char* referer,
+                                        GitOverleafError* err) {
   struct curl_slist* headers = NULL;
   char* origin = git_overleaf_sanitize_url(cfg->url);
   if (!origin) {
@@ -73,6 +74,8 @@ static struct curl_slist* build_headers(const GoConfig* cfg,
   snprintf(origin_header, origin_len, "Origin: %s", origin);
   snprintf(referer_header, referer_len, "Referer: %s",
            referer ? referer : origin);
+  /* Overleaf serves some endpoints behind browser-oriented checks, so the
+     CLI sends the same cookie, origin, and referer shape as the web app. */
   headers = curl_slist_append(headers, cookie_header);
   headers = curl_slist_append(headers, origin_header);
   headers = curl_slist_append(headers, referer_header);
@@ -98,8 +101,9 @@ static int configure_common(CURL* curl, const char* url,
   return 0;
 }
 
-int git_overleaf_http_get(const GoConfig* cfg, const char* url,
-                          const char* referer, GoBuffer* out, GoError* err) {
+int git_overleaf_http_get(const GitOverleafConfig* cfg, const char* url,
+                          const char* referer, GitOverleafBuffer* out,
+                          GitOverleafError* err) {
   memset(out, 0, sizeof(*out));
   CURL* curl = curl_easy_init();
   if (!curl) {
@@ -131,9 +135,9 @@ int git_overleaf_http_get(const GoConfig* cfg, const char* url,
   return out->data ? 0 : git_overleaf_error(err, "out of memory");
 }
 
-int git_overleaf_http_download(const GoConfig* cfg, const char* url,
+int git_overleaf_http_download(const GitOverleafConfig* cfg, const char* url,
                                const char* referer, const char* output_file,
-                               GoError* err) {
+                               GitOverleafError* err) {
   CURL* curl = curl_easy_init();
   if (!curl) {
     return git_overleaf_error(err, "could not initialize curl");
@@ -154,6 +158,8 @@ int git_overleaf_http_download(const GoConfig* cfg, const char* url,
   configure_common(curl, url, headers, error_buffer);
   curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_file_cb);
   curl_easy_setopt(curl, CURLOPT_WRITEDATA, file);
+  /* Large project snapshots should not fail because of the normal request
+     timeout; LOW_SPEED_* still catches stalled transfers. */
   curl_easy_setopt(curl, CURLOPT_TIMEOUT, 0L);
   curl_easy_setopt(curl, CURLOPT_LOW_SPEED_LIMIT, 1024L);
   curl_easy_setopt(curl, CURLOPT_LOW_SPEED_TIME, 30L);
@@ -246,6 +252,8 @@ static char* extract_attr(const char* tag_start, const char* tag_end,
   size_t name_len = strlen(name);
   const char* p = tag_start;
   while (p && p < tag_end) {
+    /* This is intentionally a tiny quoted-attribute scanner for one trusted
+       meta tag, not a general HTML parser. */
     p = strstr(p, name);
     if (!p || p >= tag_end) {
       break;
@@ -281,11 +289,27 @@ static char* extract_attr(const char* tag_start, const char* tag_end,
   return NULL;
 }
 
-static char* extract_projects_blob(const char* html, GoError* err) {
+static int looks_like_login_page(const char* html) {
+  return strstr(html, "Log in to Overleaf") || strstr(html, "/login") ||
+         strstr(html, "name=\"email\"") || strstr(html, "name=\"password\"");
+}
+
+static char* extract_projects_blob(const char* html, GitOverleafError* err) {
   const char* marker = strstr(html, "ol-prefetchedProjectsBlob");
   if (!marker) {
+    if (looks_like_login_page(html)) {
+      git_overleaf_error(
+          err,
+          "Overleaf returned the login page instead of the project list; "
+          "your cookies are missing or expired. Run `git-overleaf-cli auth "
+          "--from-firefox' after logging in to the same Overleaf host in "
+          "Firefox");
+      return NULL;
+    }
     git_overleaf_error(err,
-                       "could not find project list in Overleaf project page");
+                       "could not find project list in Overleaf project page; "
+                       "the page layout may have changed or authentication "
+                       "failed");
     return NULL;
   }
   const char* tag_start = marker;
@@ -302,6 +326,8 @@ static char* extract_projects_blob(const char* html, GoError* err) {
     git_overleaf_error(err, "could not find project list content attribute");
     return NULL;
   }
+  /* The prefetched projects JSON is stored in an HTML attribute and then
+     percent-encoded, so both layers must be removed before JSON parsing. */
   char* html_decoded = html_decode(content);
   char* decoded = html_decoded ? percent_decode(html_decoded) : NULL;
   free(content);
@@ -312,27 +338,12 @@ static char* extract_projects_blob(const char* html, GoError* err) {
   return decoded;
 }
 
-int git_overleaf_overleaf_list_projects(const GoConfig* cfg, GoProjectList* out,
-                                        GoError* err) {
+static int parse_projects_json(const char* json_text,
+                               GitOverleafProjectList* out,
+                               GitOverleafError* err) {
   memset(out, 0, sizeof(*out));
-  char* url = git_overleaf_url_join(cfg->url, "project");
-  if (!url) {
-    return git_overleaf_error(err, "out of memory");
-  }
-  GoBuffer page = {0};
-  if (git_overleaf_http_get(cfg, url, cfg->url, &page, err) != 0) {
-    free(url);
-    return -1;
-  }
-  free(url);
-  char* json_text = extract_projects_blob(page.data, err);
-  git_overleaf_buffer_free(&page);
-  if (!json_text) {
-    return -1;
-  }
   json_error_t json_err;
   json_t* root = json_loads(json_text, 0, &json_err);
-  free(json_text);
   if (!root) {
     return git_overleaf_error(err, "could not parse project list JSON: %s",
                               json_err.text);
@@ -344,7 +355,7 @@ int git_overleaf_overleaf_list_projects(const GoConfig* cfg, GoProjectList* out,
         err, "project list JSON does not contain a projects array");
   }
   size_t count = json_array_size(projects);
-  out->items = calloc(count, sizeof(GoProject));
+  out->items = calloc(count, sizeof(GitOverleafProject));
   if (!out->items && count > 0) {
     json_decref(root);
     return git_overleaf_error(err, "out of memory");
@@ -373,7 +384,41 @@ int git_overleaf_overleaf_list_projects(const GoConfig* cfg, GoProjectList* out,
   return 0;
 }
 
-void git_overleaf_project_list_free(GoProjectList* list) {
+int git_overleaf_overleaf_parse_projects_page(const char* html,
+                                              GitOverleafProjectList* out,
+                                              GitOverleafError* err) {
+  memset(out, 0, sizeof(*out));
+  if (!html) {
+    return git_overleaf_error(err, "empty Overleaf project page");
+  }
+  char* json_text = extract_projects_blob(html, err);
+  if (!json_text) {
+    return -1;
+  }
+  int rc = parse_projects_json(json_text, out, err);
+  free(json_text);
+  return rc;
+}
+
+int git_overleaf_overleaf_list_projects(const GitOverleafConfig* cfg, GitOverleafProjectList* out,
+                                        GitOverleafError* err) {
+  memset(out, 0, sizeof(*out));
+  char* url = git_overleaf_url_join(cfg->url, "project");
+  if (!url) {
+    return git_overleaf_error(err, "out of memory");
+  }
+  GitOverleafBuffer page = {0};
+  if (git_overleaf_http_get(cfg, url, cfg->url, &page, err) != 0) {
+    free(url);
+    return -1;
+  }
+  free(url);
+  int rc = git_overleaf_overleaf_parse_projects_page(page.data, out, err);
+  git_overleaf_buffer_free(&page);
+  return rc;
+}
+
+void git_overleaf_project_list_free(GitOverleafProjectList* list) {
   if (!list) {
     return;
   }

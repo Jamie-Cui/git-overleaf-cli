@@ -1,0 +1,66 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            cmake \
+            git \
+            libgtest-dev \
+            libcurl4-openssl-dev \
+            libjansson-dev \
+            libsqlite3-dev \
+            pkg-config \
+            unzip
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
+      - name: Build
+        run: cmake --build build --parallel
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+      - name: Smoke test
+        run: ./build/git-overleaf-cli --help
+
+  coverage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            cmake \
+            gcovr \
+            git \
+            libgtest-dev \
+            libcurl4-openssl-dev \
+            libjansson-dev \
+            libsqlite3-dev \
+            pkg-config \
+            unzip
+      - name: Configure with coverage
+        run: >
+          cmake -S . -B build-coverage
+          -DCMAKE_BUILD_TYPE=Debug
+          -DGIT_OVERLEAF_ENABLE_COVERAGE=ON
+      - name: Coverage summary
+        run: cmake --build build-coverage --target coverage --parallel
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-xml
+          path: build-coverage/coverage.xml

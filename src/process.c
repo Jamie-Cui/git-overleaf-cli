@@ -46,7 +46,7 @@ static char* format_command(char* const argv[]) {
 
 int git_overleaf_process_run(char* const argv[], const char* cwd,
                              char* const env[], int allow_failure,
-                             GoProcessResult* out, GoError* err) {
+                             GitOverleafProcessResult* out, GitOverleafError* err) {
   memset(out, 0, sizeof(*out));
   int pipefd[2];
   if (pipe(pipefd) != 0) {
@@ -63,6 +63,8 @@ int git_overleaf_process_run(char* const argv[], const char* cwd,
 
   if (pid == 0) {
     close(pipefd[0]);
+    /* Keep command diagnostics together: callers often show this buffer as
+       the failure detail instead of streaming child output live. */
     dup2(pipefd[1], STDOUT_FILENO);
     dup2(pipefd[1], STDERR_FILENO);
     close(pipefd[1]);
@@ -88,7 +90,7 @@ int git_overleaf_process_run(char* const argv[], const char* cwd,
   }
 
   close(pipefd[1]);
-  GoBuffer buffer = {0};
+  GitOverleafBuffer buffer = {0};
   char chunk[4096];
   for (;;) {
     ssize_t n = read(pipefd[0], chunk, sizeof(chunk));
@@ -129,6 +131,8 @@ int git_overleaf_process_run(char* const argv[], const char* cwd,
   if (WIFEXITED(status)) {
     exit_status = WEXITSTATUS(status);
   } else if (WIFSIGNALED(status)) {
+    /* Match the shell convention so callers can distinguish signal failures
+       while still treating status as a simple integer. */
     exit_status = 128 + WTERMSIG(status);
   }
 
@@ -154,7 +158,7 @@ int git_overleaf_process_run(char* const argv[], const char* cwd,
   return 0;
 }
 
-void git_overleaf_process_result_free(GoProcessResult* result) {
+void git_overleaf_process_result_free(GitOverleafProcessResult* result) {
   if (result) {
     free(result->output);
     result->output = NULL;

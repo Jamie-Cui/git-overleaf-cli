@@ -26,7 +26,7 @@
 
 #include "git-overleaf-cli.h"
 
-int git_overleaf_ensure_directory(const char* path, GoError* err) {
+int git_overleaf_ensure_directory(const char* path, GitOverleafError* err) {
   if (!path || !*path) {
     return git_overleaf_error(err, "empty directory path");
   }
@@ -57,7 +57,7 @@ int git_overleaf_ensure_directory(const char* path, GoError* err) {
 }
 
 int git_overleaf_directory_empty_or_missing(const char* path, int* empty,
-                                            GoError* err) {
+                                            GitOverleafError* err) {
   *empty = 1;
   struct stat st;
   if (lstat(path, &st) != 0) {
@@ -88,7 +88,7 @@ int git_overleaf_directory_empty_or_missing(const char* path, int* empty,
 }
 
 static int copy_file(const char* source, const char* destination, mode_t mode,
-                     GoError* err) {
+                     GitOverleafError* err) {
   int in = open(source, O_RDONLY);
   if (in < 0) {
     return git_overleaf_error(err, "could not open %s: %s", source,
@@ -142,7 +142,7 @@ static int copy_file(const char* source, const char* destination, mode_t mode,
 }
 
 int git_overleaf_copy_tree(const char* source, const char* destination,
-                           GoError* err) {
+                           GitOverleafError* err) {
   struct stat st;
   if (lstat(source, &st) != 0) {
     return git_overleaf_error(err, "could not inspect %s: %s", source,
@@ -185,10 +185,12 @@ int git_overleaf_copy_tree(const char* source, const char* destination,
   if (S_ISREG(st.st_mode)) {
     return copy_file(source, destination, st.st_mode, err);
   }
+  /* Overleaf snapshots are expected to be regular files and directories.
+     Skipping special files avoids copying device nodes or following symlinks. */
   return 0;
 }
 
-int git_overleaf_remove_tree(const char* path, GoError* err) {
+int git_overleaf_remove_tree(const char* path, GitOverleafError* err) {
   struct stat st;
   if (lstat(path, &st) != 0) {
     if (errno == ENOENT) {
@@ -232,7 +234,7 @@ int git_overleaf_remove_tree(const char* path, GoError* err) {
   return 0;
 }
 
-int git_overleaf_make_temp_dir(char** out, GoError* err) {
+int git_overleaf_make_temp_dir(char** out, GitOverleafError* err) {
   *out = NULL;
   const char* tmp = getenv("TMPDIR");
   if (!tmp || !*tmp) {
@@ -252,7 +254,7 @@ int git_overleaf_make_temp_dir(char** out, GoError* err) {
   return 0;
 }
 
-int git_overleaf_make_temp_file(char** out, GoError* err) {
+int git_overleaf_make_temp_file(char** out, GitOverleafError* err) {
   *out = NULL;
   const char* tmp = getenv("TMPDIR");
   if (!tmp || !*tmp) {
@@ -275,7 +277,7 @@ int git_overleaf_make_temp_file(char** out, GoError* err) {
 }
 
 int git_overleaf_normalize_extracted_root(const char* directory, char** out,
-                                          GoError* err) {
+                                          GitOverleafError* err) {
   *out = NULL;
   DIR* dir = opendir(directory);
   if (!dir) {
@@ -298,6 +300,8 @@ int git_overleaf_normalize_extracted_root(const char* directory, char** out,
     }
   }
   closedir(dir);
+  /* unzip may produce either files directly under temp_dir or a single
+     wrapper directory; return the directory that actually contains content. */
   if (count == 1) {
     struct stat st;
     if (lstat(only, &st) == 0 && S_ISDIR(st.st_mode)) {
@@ -311,11 +315,11 @@ int git_overleaf_normalize_extracted_root(const char* directory, char** out,
 }
 
 int git_overleaf_delete_sync_metadata(const char* root, char** metadata_text,
-                                      GoError* err) {
+                                      GitOverleafError* err) {
   if (metadata_text) {
     *metadata_text = NULL;
   }
-  char* path = git_overleaf_path_join(root, GO_SYNC_METADATA_FILE);
+  char* path = git_overleaf_path_join(root, GIT_OVERLEAF_SYNC_METADATA_FILE);
   if (!path) {
     return git_overleaf_error(err, "out of memory");
   }
@@ -324,6 +328,8 @@ int git_overleaf_delete_sync_metadata(const char* root, char** metadata_text,
     free(path);
     return 0;
   }
+  /* Remove sync metadata from downloaded snapshots before Git tree comparison
+     so pull decisions are based on project files only. */
   if (metadata_text && S_ISREG(st.st_mode)) {
     char* text = NULL;
     if (git_overleaf_read_file(path, &text, err) != 0) {
@@ -338,7 +344,7 @@ int git_overleaf_delete_sync_metadata(const char* root, char** metadata_text,
     int saved = errno;
     free(path);
     return git_overleaf_error(err, "could not remove %s: %s",
-                              GO_SYNC_METADATA_FILE, strerror(saved));
+                              GIT_OVERLEAF_SYNC_METADATA_FILE, strerror(saved));
   }
   free(path);
   return 0;

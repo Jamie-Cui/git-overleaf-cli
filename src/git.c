@@ -23,7 +23,7 @@
 
 #include "git-overleaf-cli.h"
 
-static char** build_git_argv(const GoConfig* cfg, const char* repo,
+static char** build_git_argv(const GitOverleafConfig* cfg, const char* repo,
                              const char* const args[], size_t argc) {
   size_t extra = repo ? 3 : 1;
   char** argv = calloc(extra + argc + 1, sizeof(char*));
@@ -43,10 +43,10 @@ static char** build_git_argv(const GoConfig* cfg, const char* repo,
   return argv;
 }
 
-int git_overleaf_git_capture(const GoConfig* cfg, const char* repo,
+int git_overleaf_git_capture(const GitOverleafConfig* cfg, const char* repo,
                              const char* const args[], size_t argc,
                              char* const env[], int allow_failure,
-                             GoProcessResult* out, GoError* err) {
+                             GitOverleafProcessResult* out, GitOverleafError* err) {
   char** argv = build_git_argv(cfg, repo, args, argc);
   if (!argv) {
     return git_overleaf_error(err, "out of memory");
@@ -56,11 +56,12 @@ int git_overleaf_git_capture(const GoConfig* cfg, const char* repo,
   return rc;
 }
 
-int git_overleaf_git_output(const GoConfig* cfg, const char* repo,
+int git_overleaf_git_output(const GitOverleafConfig* cfg, const char* repo,
                             const char* const args[], size_t argc,
-                            char* const env[], char** out, GoError* err) {
+                            char* const env[], char** out,
+                            GitOverleafError* err) {
   *out = NULL;
-  GoProcessResult result;
+  GitOverleafProcessResult result;
   if (git_overleaf_git_capture(cfg, repo, args, argc, env, 0, &result, err) !=
       0) {
     return -1;
@@ -71,20 +72,23 @@ int git_overleaf_git_output(const GoConfig* cfg, const char* repo,
   return 0;
 }
 
-int git_overleaf_git_ok(const GoConfig* cfg, const char* repo,
+int git_overleaf_git_ok(const GitOverleafConfig* cfg, const char* repo,
                         const char* const args[], size_t argc,
-                        char* const env[], GoError* err) {
-  GoProcessResult result;
+                        char* const env[], GitOverleafError* err) {
+  GitOverleafProcessResult result;
   int rc =
       git_overleaf_git_capture(cfg, repo, args, argc, env, 0, &result, err);
   git_overleaf_process_result_free(&result);
   return rc;
 }
 
-int git_overleaf_git_config_get(const GoConfig* cfg, const char* repo,
-                                const char* key, char** out, GoError* err) {
+int git_overleaf_git_config_get(const GitOverleafConfig* cfg, const char* repo,
+                                const char* key, char** out,
+                                GitOverleafError* err) {
   const char* args[] = {"config", "--local", "--get", key};
-  GoProcessResult result;
+  GitOverleafProcessResult result;
+  /* A missing local config key is represented as NULL, not as a command
+     failure, because several callers use absence as default-state input. */
   if (git_overleaf_git_capture(cfg, repo, args, 4, NULL, 1, &result, err) !=
       0) {
     return -1;
@@ -99,17 +103,17 @@ int git_overleaf_git_config_get(const GoConfig* cfg, const char* repo,
   return 0;
 }
 
-int git_overleaf_git_config_set(const GoConfig* cfg, const char* repo,
+int git_overleaf_git_config_set(const GitOverleafConfig* cfg, const char* repo,
                                 const char* key, const char* value,
-                                GoError* err) {
+                                GitOverleafError* err) {
   const char* args[] = {"config", "--local", key, value};
   return git_overleaf_git_ok(cfg, repo, args, 4, NULL, err);
 }
 
-int git_overleaf_git_root(const GoConfig* cfg, const char* directory,
-                          char** out, GoError* err) {
+int git_overleaf_git_root(const GitOverleafConfig* cfg, const char* directory,
+                          char** out, GitOverleafError* err) {
   const char* args[] = {"rev-parse", "--show-toplevel"};
-  GoProcessResult result;
+  GitOverleafProcessResult result;
   if (git_overleaf_git_capture(cfg, directory ? directory : ".", args, 2, NULL,
                                1, &result, err) != 0) {
     return -1;
@@ -124,8 +128,8 @@ int git_overleaf_git_root(const GoConfig* cfg, const char* directory,
   return 0;
 }
 
-int git_overleaf_git_current_branch(const GoConfig* cfg, const char* repo,
-                                    char** out, GoError* err) {
+int git_overleaf_git_current_branch(const GitOverleafConfig* cfg, const char* repo,
+                                    char** out, GitOverleafError* err) {
   const char* args[] = {"branch", "--show-current"};
   if (git_overleaf_git_output(cfg, repo, args, 2, NULL, out, err) != 0) {
     return -1;
@@ -138,17 +142,20 @@ int git_overleaf_git_current_branch(const GoConfig* cfg, const char* repo,
   return 0;
 }
 
-int git_overleaf_git_rev_parse(const GoConfig* cfg, const char* repo,
-                               const char* revision, char** out, GoError* err) {
+int git_overleaf_git_rev_parse(const GitOverleafConfig* cfg, const char* repo,
+                               const char* revision, char** out,
+                               GitOverleafError* err) {
   const char* args[] = {"rev-parse", revision};
   return git_overleaf_git_output(cfg, repo, args, 2, NULL, out, err);
 }
 
-int git_overleaf_git_rev_parse_verify(const GoConfig* cfg, const char* repo,
+int git_overleaf_git_rev_parse_verify(const GitOverleafConfig* cfg, const char* repo,
                                       const char* revision, char** out,
-                                      GoError* err) {
+                                      GitOverleafError* err) {
   const char* args[] = {"rev-parse", "--verify", revision};
-  GoProcessResult result;
+  GitOverleafProcessResult result;
+  /* The base ref is optional during first-time init, so verification failure
+     becomes a NULL revision rather than a hard error. */
   if (git_overleaf_git_capture(cfg, repo, args, 3, NULL, 1, &result, err) !=
       0) {
     return -1;
@@ -163,8 +170,9 @@ int git_overleaf_git_rev_parse_verify(const GoConfig* cfg, const char* repo,
   return 0;
 }
 
-int git_overleaf_git_tree_id(const GoConfig* cfg, const char* repo,
-                             const char* revision, char** out, GoError* err) {
+int git_overleaf_git_tree_id(const GitOverleafConfig* cfg, const char* repo,
+                             const char* revision, char** out,
+                             GitOverleafError* err) {
   size_t len = strlen(revision) + strlen("^{tree}") + 1;
   char* spec = malloc(len);
   if (!spec) {
@@ -177,8 +185,8 @@ int git_overleaf_git_tree_id(const GoConfig* cfg, const char* repo,
   return rc;
 }
 
-int git_overleaf_git_is_clean(const GoConfig* cfg, const char* repo,
-                              GoError* err) {
+int git_overleaf_git_is_clean(const GitOverleafConfig* cfg, const char* repo,
+                              GitOverleafError* err) {
   const char* args[] = {"status", "--porcelain"};
   char* out = NULL;
   if (git_overleaf_git_output(cfg, repo, args, 2, NULL, &out, err) != 0) {
@@ -193,11 +201,11 @@ int git_overleaf_git_is_clean(const GoConfig* cfg, const char* repo,
   return 0;
 }
 
-int git_overleaf_git_is_ancestor(const GoConfig* cfg, const char* repo,
+int git_overleaf_git_is_ancestor(const GitOverleafConfig* cfg, const char* repo,
                                  const char* ancestor, const char* descendant,
-                                 int* is_ancestor, GoError* err) {
+                                 int* is_ancestor, GitOverleafError* err) {
   const char* args[] = {"merge-base", "--is-ancestor", ancestor, descendant};
-  GoProcessResult result;
+  GitOverleafProcessResult result;
   if (git_overleaf_git_capture(cfg, repo, args, 4, NULL, 1, &result, err) !=
       0) {
     return -1;
@@ -207,15 +215,15 @@ int git_overleaf_git_is_ancestor(const GoConfig* cfg, const char* repo,
   return 0;
 }
 
-static int git_identity_args(const GoConfig* cfg, const char* repo,
+static int git_identity_args(const GitOverleafConfig* cfg, const char* repo,
                              const char*** args_out, size_t* argc_out,
-                             GoError* err) {
+                             GitOverleafError* err) {
   static const char* placeholder[] = {"-c", "user.name=Overleaf Project", "-c",
                                       "user.email=git-overleaf@local"};
   const char* name_args[] = {"config", "--get", "user.name"};
   const char* email_args[] = {"config", "--get", "user.email"};
-  GoProcessResult name;
-  GoProcessResult email;
+  GitOverleafProcessResult name;
+  GitOverleafProcessResult email;
   if (git_overleaf_git_capture(cfg, repo, name_args, 3, NULL, 1, &name, err) !=
       0) {
     return -1;
@@ -239,16 +247,18 @@ static int git_identity_args(const GoConfig* cfg, const char* repo,
   return 0;
 }
 
-int git_overleaf_git_commit_directory(const GoConfig* cfg, const char* repo,
+int git_overleaf_git_commit_directory(const GitOverleafConfig* cfg, const char* repo,
                                       const char* directory, const char* parent,
                                       const char* message, char** commit_out,
-                                      GoError* err) {
+                                      GitOverleafError* err) {
   *commit_out = NULL;
   char* index_file = NULL;
   if (git_overleaf_make_temp_file(&index_file, err) != 0) {
     return -1;
   }
   unlink(index_file);
+  /* Build the snapshot commit with an isolated index. This avoids touching the
+     user's staged changes while still writing objects into the target repo. */
   size_t env_len = strlen("GIT_INDEX_FILE=") + strlen(index_file) + 1;
   char* env_index = malloc(env_len);
   if (!env_index) {
@@ -314,6 +324,8 @@ int git_overleaf_git_commit_directory(const GoConfig* cfg, const char* repo,
   commit_args[i++] = "-m";
   commit_args[i++] = message;
 
+  /* commit-tree returns the new commit ID without updating any refs; callers
+     decide whether this synthetic snapshot becomes the base or is merged. */
   int rc = git_overleaf_git_output(cfg, repo, commit_args, argc, env,
                                    commit_out, err);
   free(commit_args);
@@ -325,9 +337,10 @@ int git_overleaf_git_commit_directory(const GoConfig* cfg, const char* repo,
   return rc;
 }
 
-int git_overleaf_git_write_metadata(const GoConfig* cfg, const char* repo,
+int git_overleaf_git_write_metadata(const GitOverleafConfig* cfg, const char* repo,
                                     const char* project_id,
-                                    const char* project_name, GoError* err) {
+                                    const char* project_name,
+                                    GitOverleafError* err) {
   char* url = git_overleaf_sanitize_url(cfg->url);
   if (!url) {
     return git_overleaf_error(err, "out of memory");
@@ -341,19 +354,19 @@ int git_overleaf_git_write_metadata(const GoConfig* cfg, const char* repo,
   rc = rc ||
        git_overleaf_git_config_set(cfg, repo, "git-overleaf.url", url, err);
   rc = rc || git_overleaf_git_config_set(cfg, repo, "git-overleaf.baseRef",
-                                         GO_BASE_REF, err);
+                                         GIT_OVERLEAF_BASE_REF, err);
   free(url);
   return rc ? -1 : 0;
 }
 
-int git_overleaf_git_set_base_ref(const GoConfig* cfg, const char* repo,
-                                  const char* revision, GoError* err) {
+int git_overleaf_git_set_base_ref(const GitOverleafConfig* cfg, const char* repo,
+                                  const char* revision, GitOverleafError* err) {
   char* base_ref = NULL;
   if (git_overleaf_git_config_get(cfg, repo, "git-overleaf.baseRef", &base_ref,
                                   err) != 0) {
     return -1;
   }
-  const char* ref = base_ref && *base_ref ? base_ref : GO_BASE_REF;
+  const char* ref = base_ref && *base_ref ? base_ref : GIT_OVERLEAF_BASE_REF;
   const char* args[] = {"update-ref", ref, revision};
   int rc = git_overleaf_git_ok(cfg, repo, args, 3, NULL, err);
   free(base_ref);
@@ -361,7 +374,7 @@ int git_overleaf_git_set_base_ref(const GoConfig* cfg, const char* repo,
 }
 
 int git_overleaf_git_prepare_sync_metadata_repo(const char* repo,
-                                                GoError* err) {
+                                                GitOverleafError* err) {
   char* git_dir = git_overleaf_path_join(repo, ".git");
   char* info_dir = git_dir ? git_overleaf_path_join(git_dir, "info") : NULL;
   char* exclude = info_dir ? git_overleaf_path_join(info_dir, "exclude") : NULL;
@@ -377,8 +390,10 @@ int git_overleaf_git_prepare_sync_metadata_repo(const char* repo,
     free(exclude);
     return -1;
   }
+  /* The sync metadata file is tool-local state. Store the ignore rule in
+     .git/info/exclude so the repository's tracked .gitignore is untouched. */
   char* text = NULL;
-  GoError ignored = {{0}};
+  GitOverleafError ignored = {{0}};
   if (git_overleaf_read_file(exclude, &text, &ignored) != 0) {
     text = git_overleaf_xstrdup("");
   }
@@ -393,7 +408,7 @@ int git_overleaf_git_prepare_sync_metadata_repo(const char* repo,
       return git_overleaf_error(err, "out of memory");
     }
     for (char* line = strtok(copy, "\n"); line; line = strtok(NULL, "\n")) {
-      if (strcmp(git_overleaf_trim(line), GO_SYNC_METADATA_FILE) == 0) {
+      if (strcmp(git_overleaf_trim(line), GIT_OVERLEAF_SYNC_METADATA_FILE) == 0) {
         present = 1;
         break;
       }
@@ -413,7 +428,7 @@ int git_overleaf_git_prepare_sync_metadata_repo(const char* repo,
     if (text && *text && text[strlen(text) - 1] != '\n') {
       fputc('\n', file);
     }
-    fputs(GO_SYNC_METADATA_FILE "\n", file);
+    fputs(GIT_OVERLEAF_SYNC_METADATA_FILE "\n", file);
     fclose(file);
   }
   free(text);
