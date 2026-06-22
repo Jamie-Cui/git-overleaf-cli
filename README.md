@@ -1,4 +1,4 @@
-# git-overleaf-cli MVP
+# git-overleaf-cli
 
 This directory contains an experimental native C command-line client for
 git-overleaf.  It is intentionally separate from the Emacs package files and is

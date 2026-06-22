@@ -1,13 +1,28 @@
-#define _POSIX_C_SOURCE 200809L
+// Copyright (C) 2026 Jamie Cui <jamie.cui@outlook.com>
 
-#include "git-overleaf-cli/cli.h"
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+#define _POSIX_C_SOURCE 200809L
 
 #include <curl/curl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-static void usage(FILE *stream) {
+#include "git-overleaf-cli.h"
+
+static void usage(FILE* stream) {
   fprintf(
       stream,
       "git-overleaf-cli 0.1 MVP\n"
@@ -34,17 +49,17 @@ static void usage(FILE *stream) {
       "No webdriver authentication is implemented in this MVP.\n");
 }
 
-static int need_value(int argc, char **argv, int index, GoError *err) {
+static int need_value(int argc, char** argv, int index, GoError* err) {
   if (index + 1 >= argc) {
     return git_overleaf_error(err, "%s requires a value", argv[index]);
   }
   return 0;
 }
 
-static int parse_global(GoConfig *cfg, int argc, char **argv, int *index,
-                        GoError *err) {
+static int parse_global(GoConfig* cfg, int argc, char** argv, int* index,
+                        GoError* err) {
   while (*index < argc) {
-    const char *arg = argv[*index];
+    const char* arg = argv[*index];
     if (strcmp(arg, "--help") == 0 || strcmp(arg, "-h") == 0) {
       usage(stdout);
       exit(0);
@@ -104,8 +119,8 @@ static int parse_global(GoConfig *cfg, int argc, char **argv, int *index,
   return 0;
 }
 
-static int command_auth(GoConfig *cfg, int argc, char **argv, GoError *err) {
-  const char *cookie = cfg->cookie;
+static int command_auth(GoConfig* cfg, int argc, char** argv, GoError* err) {
+  const char* cookie = cfg->cookie;
   for (int i = 0; i < argc; i++) {
     if (strcmp(argv[i], "--cookie") == 0) {
       if (need_value(argc, argv, i, err) != 0) {
@@ -128,9 +143,9 @@ static int command_auth(GoConfig *cfg, int argc, char **argv, GoError *err) {
   if (!cookie || !*cookie) {
     return git_overleaf_error(err, "auth requires --cookie COOKIE");
   }
-  if (git_overleaf_write_private_file(cfg->cookie_file ? cfg->cookie_file
-                                                       : GO_DEFAULT_COOKIE_FILE,
-                                      cookie, err) != 0) {
+  if (git_overleaf_write_private_file(
+          cfg->cookie_file ? cfg->cookie_file : GO_DEFAULT_COOKIE_FILE, cookie,
+          err) != 0) {
     return -1;
   }
   printf("Saved Overleaf cookies to %s\n",
@@ -138,7 +153,7 @@ static int command_auth(GoConfig *cfg, int argc, char **argv, GoError *err) {
   return 0;
 }
 
-static int command_list(GoConfig *cfg, GoError *err) {
+static int command_list(GoConfig* cfg, GoError* err) {
   if (git_overleaf_config_load_cookie(cfg, err) != 0) {
     return -1;
   }
@@ -155,10 +170,10 @@ static int command_list(GoConfig *cfg, GoError *err) {
   return 0;
 }
 
-static int command_clone(GoConfig *cfg, int argc, char **argv, GoError *err) {
-  const char *project_id = NULL;
-  const char *project_name = NULL;
-  const char *target = NULL;
+static int command_clone(GoConfig* cfg, int argc, char** argv, GoError* err) {
+  const char* project_id = NULL;
+  const char* project_name = NULL;
+  const char* target = NULL;
   for (int i = 0; i < argc; i++) {
     if (strcmp(argv[i], "--project-id") == 0) {
       if (need_value(argc, argv, i, err) != 0) {
@@ -196,10 +211,10 @@ static int command_clone(GoConfig *cfg, int argc, char **argv, GoError *err) {
   return 0;
 }
 
-static int command_init(GoConfig *cfg, int argc, char **argv, GoError *err) {
-  const char *project_id = NULL;
-  const char *project_name = NULL;
-  const char *repo = ".";
+static int command_init(GoConfig* cfg, int argc, char** argv, GoError* err) {
+  const char* project_id = NULL;
+  const char* project_name = NULL;
+  const char* repo = ".";
   for (int i = 0; i < argc; i++) {
     if (strcmp(argv[i], "--project-id") == 0) {
       if (need_value(argc, argv, i, err) != 0) {
@@ -235,8 +250,8 @@ static int command_init(GoConfig *cfg, int argc, char **argv, GoError *err) {
   return 0;
 }
 
-static int command_pull(GoConfig *cfg, int argc, char **argv, GoError *err) {
-  const char *repo = ".";
+static int command_pull(GoConfig* cfg, int argc, char** argv, GoError* err) {
+  const char* repo = ".";
   for (int i = 0; i < argc; i++) {
     if (strcmp(argv[i], "--repo") == 0) {
       if (need_value(argc, argv, i, err) != 0) {
@@ -253,7 +268,7 @@ static int command_pull(GoConfig *cfg, int argc, char **argv, GoError *err) {
   return git_overleaf_overleaf_pull(cfg, repo, err);
 }
 
-int main(int argc, char **argv) {
+int main(int argc, char** argv) {
   GoConfig cfg;
   GoError err = {{0}};
   git_overleaf_config_init(&cfg);
@@ -277,7 +292,7 @@ int main(int argc, char **argv) {
   }
 
   curl_global_init(CURL_GLOBAL_DEFAULT);
-  const char *command = argv[index++];
+  const char* command = argv[index++];
   if (strcmp(command, "auth") == 0) {
     rc = command_auth(&cfg, argc - index, argv + index, &err);
   } else if (strcmp(command, "list") == 0) {

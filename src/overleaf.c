@@ -1,6 +1,19 @@
-#define _POSIX_C_SOURCE 200809L
+// Copyright (C) 2026 Jamie Cui <jamie.cui@outlook.com>
 
-#include "git-overleaf-cli/cli.h"
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+#define _POSIX_C_SOURCE 200809L
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -8,9 +21,11 @@
 #include <time.h>
 #include <unistd.h>
 
-static char *project_path(const char *project_id) {
+#include "git-overleaf-cli.h"
+
+static char* project_path(const char* project_id) {
   size_t len = strlen("project//") + strlen(project_id) + 1;
-  char *path = malloc(len);
+  char* path = malloc(len);
   if (!path) {
     return NULL;
   }
@@ -18,9 +33,9 @@ static char *project_path(const char *project_id) {
   return path;
 }
 
-static char *project_download_path(const char *project_id) {
+static char* project_download_path(const char* project_id) {
   size_t len = strlen("project//download/zip") + strlen(project_id) + 1;
-  char *path = malloc(len);
+  char* path = malloc(len);
   if (!path) {
     return NULL;
   }
@@ -28,16 +43,16 @@ static char *project_download_path(const char *project_id) {
   return path;
 }
 
-static int git_unset_config(const GoConfig *cfg, const char *repo,
-                            const char *key, GoError *err) {
-  const char *args[] = {"config", "--local", "--unset-all", key};
+static int git_unset_config(const GoConfig* cfg, const char* repo,
+                            const char* key, GoError* err) {
+  const char* args[] = {"config", "--local", "--unset-all", key};
   GoProcessResult result;
   int rc = git_overleaf_git_capture(cfg, repo, args, 4, NULL, 1, &result, err);
   git_overleaf_process_result_free(&result);
   return rc;
 }
 
-static int clear_pending(const GoConfig *cfg, const char *repo, GoError *err) {
+static int clear_pending(const GoConfig* cfg, const char* repo, GoError* err) {
   if (git_unset_config(cfg, repo, "git-overleaf.pendingRemoteCommit", err) !=
       0) {
     return -1;
@@ -48,8 +63,8 @@ static int clear_pending(const GoConfig *cfg, const char *repo, GoError *err) {
   return 0;
 }
 
-static int repo_project_id(const GoConfig *cfg, const char *repo, char **out,
-                           GoError *err) {
+static int repo_project_id(const GoConfig* cfg, const char* repo, char** out,
+                           GoError* err) {
   if (git_overleaf_git_config_get(cfg, repo, "git-overleaf.projectId", out,
                                   err) != 0) {
     return -1;
@@ -63,9 +78,9 @@ static int repo_project_id(const GoConfig *cfg, const char *repo, char **out,
   return 0;
 }
 
-static int apply_repo_url(const GoConfig *cfg, const char *repo,
-                          GoConfig *local, char **repo_url_owner,
-                          GoError *err) {
+static int apply_repo_url(const GoConfig* cfg, const char* repo,
+                          GoConfig* local, char** repo_url_owner,
+                          GoError* err) {
   *local = *cfg;
   *repo_url_owner = NULL;
   if (cfg->url_explicit) {
@@ -81,17 +96,17 @@ static int apply_repo_url(const GoConfig *cfg, const char *repo,
   return 0;
 }
 
-int git_overleaf_overleaf_download_snapshot(const GoConfig *cfg,
-                                            const char *project_id,
-                                            GoSnapshot *out, GoError *err) {
+int git_overleaf_overleaf_download_snapshot(const GoConfig* cfg,
+                                            const char* project_id,
+                                            GoSnapshot* out, GoError* err) {
   memset(out, 0, sizeof(*out));
-  char *temp_dir = NULL;
-  char *zip_file = NULL;
-  char *download_path = NULL;
-  char *download_url = NULL;
-  char *referer_path = NULL;
-  char *referer_url = NULL;
-  char *root = NULL;
+  char* temp_dir = NULL;
+  char* zip_file = NULL;
+  char* download_path = NULL;
+  char* download_url = NULL;
+  char* referer_path = NULL;
+  char* referer_url = NULL;
+  char* root = NULL;
 
   if (git_overleaf_make_temp_dir(&temp_dir, err) != 0 ||
       git_overleaf_make_temp_file(&zip_file, err) != 0) {
@@ -128,7 +143,7 @@ int git_overleaf_overleaf_download_snapshot(const GoConfig *cfg,
     return -1;
   }
 
-  char *argv[] = {
+  char* argv[] = {
       cfg->unzip ? cfg->unzip : "unzip", "-q", zip_file, "-d", temp_dir, NULL};
   GoProcessResult unzip_result;
   if (git_overleaf_process_run(argv, NULL, NULL, 0, &unzip_result, err) != 0) {
@@ -167,7 +182,7 @@ int git_overleaf_overleaf_download_snapshot(const GoConfig *cfg,
   return 0;
 }
 
-void git_overleaf_snapshot_free(GoSnapshot *snapshot) {
+void git_overleaf_snapshot_free(GoSnapshot* snapshot) {
   if (!snapshot) {
     return;
   }
@@ -181,9 +196,9 @@ void git_overleaf_snapshot_free(GoSnapshot *snapshot) {
   snapshot->root = NULL;
 }
 
-int git_overleaf_overleaf_clone(const GoConfig *cfg, const char *project_id,
-                                const char *project_name, const char *target,
-                                GoError *err) {
+int git_overleaf_overleaf_clone(const GoConfig* cfg, const char* project_id,
+                                const char* project_name, const char* target,
+                                GoError* err) {
   int empty = 0;
   if (git_overleaf_directory_empty_or_missing(target, &empty, err) != 0) {
     return -1;
@@ -205,9 +220,9 @@ int git_overleaf_overleaf_clone(const GoConfig *cfg, const char *project_id,
     goto done;
   }
 
-  const char *init_args[] = {"init"};
-  const char *add_args[] = {"add", "--all", "."};
-  const char *commit_args[] = {"-c",
+  const char* init_args[] = {"init"};
+  const char* add_args[] = {"add", "--all", "."};
+  const char* commit_args[] = {"-c",
                                "user.name=Overleaf Project",
                                "-c",
                                "user.email=git-overleaf@local",
@@ -231,12 +246,12 @@ done:
   return rc;
 }
 
-int git_overleaf_overleaf_init(const GoConfig *cfg, const char *repo_arg,
-                               const char *project_id, const char *project_name,
-                               GoError *err) {
-  char *repo = NULL;
-  char *parent = NULL;
-  char *commit = NULL;
+int git_overleaf_overleaf_init(const GoConfig* cfg, const char* repo_arg,
+                               const char* project_id, const char* project_name,
+                               GoError* err) {
+  char* repo = NULL;
+  char* parent = NULL;
+  char* commit = NULL;
   GoSnapshot snapshot;
   memset(&snapshot, 0, sizeof(snapshot));
 
@@ -291,8 +306,8 @@ typedef enum {
   SYNC_DIVERGED
 } SyncState;
 
-static SyncState classify(const char *base_tree, const char *head_tree,
-                          const char *remote_tree) {
+static SyncState classify(const char* base_tree, const char* head_tree,
+                          const char* remote_tree) {
   if (strcmp(head_tree, base_tree) == 0 &&
       strcmp(remote_tree, base_tree) == 0) {
     return SYNC_IN_SYNC;
@@ -309,20 +324,20 @@ static SyncState classify(const char *base_tree, const char *head_tree,
   return SYNC_DIVERGED;
 }
 
-int git_overleaf_overleaf_pull(const GoConfig *cfg, const char *repo_arg,
-                               GoError *err) {
-  char *repo = NULL;
-  char *repo_url = NULL;
-  char *project_id = NULL;
-  char *project_name = NULL;
-  char *branch = NULL;
-  char *pending = NULL;
-  char *base = NULL;
-  char *head = NULL;
-  char *remote_commit = NULL;
-  char *base_tree = NULL;
-  char *head_tree = NULL;
-  char *remote_tree = NULL;
+int git_overleaf_overleaf_pull(const GoConfig* cfg, const char* repo_arg,
+                               GoError* err) {
+  char* repo = NULL;
+  char* repo_url = NULL;
+  char* project_id = NULL;
+  char* project_name = NULL;
+  char* branch = NULL;
+  char* pending = NULL;
+  char* base = NULL;
+  char* head = NULL;
+  char* remote_commit = NULL;
+  char* base_tree = NULL;
+  char* head_tree = NULL;
+  char* remote_tree = NULL;
   GoSnapshot snapshot;
   memset(&snapshot, 0, sizeof(snapshot));
 
@@ -369,56 +384,58 @@ int git_overleaf_overleaf_pull(const GoConfig *cfg, const char *repo_arg,
   }
 
   switch (classify(base_tree, head_tree, remote_tree)) {
-  case SYNC_IN_SYNC:
-    printf("Project `%s' is already in sync\n",
-           project_name && *project_name ? project_name : project_id);
-    break;
-  case SYNC_HEAD_MATCHES_REMOTE:
-    if (git_overleaf_git_set_base_ref(cfg, repo, head, err) != 0) {
-      goto fail;
-    }
-    printf("Local and remote content match; base ref updated\n");
-    break;
-  case SYNC_REMOTE_MATCHES_BASE:
-    printf("No remote Overleaf changes to pull into `%s'\n", branch);
-    break;
-  case SYNC_HEAD_MATCHES_BASE: {
-    const char *merge_args[] = {"merge", "--ff-only", remote_commit};
-    if (git_overleaf_git_ok(cfg, repo, merge_args, 3, NULL, err) != 0 ||
-        git_overleaf_git_set_base_ref(cfg, repo, "HEAD", err) != 0) {
-      goto fail;
-    }
-    printf("Pulled remote Overleaf changes into `%s'\n", branch);
-    break;
-  }
-  case SYNC_DIVERGED: {
-    const char *merge_args[] = {"merge", "--no-ff", "--no-edit", remote_commit};
-    GoProcessResult merge_result;
-    if (git_overleaf_git_capture(cfg, repo, merge_args, 4, NULL, 1,
-                                 &merge_result, err) != 0) {
-      goto fail;
-    }
-    if (merge_result.status == 0) {
-      git_overleaf_process_result_free(&merge_result);
-      if (git_overleaf_git_set_base_ref(cfg, repo, remote_commit, err) != 0) {
+    case SYNC_IN_SYNC:
+      printf("Project `%s' is already in sync\n",
+             project_name && *project_name ? project_name : project_id);
+      break;
+    case SYNC_HEAD_MATCHES_REMOTE:
+      if (git_overleaf_git_set_base_ref(cfg, repo, head, err) != 0) {
         goto fail;
       }
-      printf("Pulled Overleaf changes into `%s'\n", branch);
-    } else {
-      git_overleaf_process_result_free(&merge_result);
-      if (git_overleaf_git_config_set(cfg, repo,
-                                      "git-overleaf.pendingRemoteCommit",
-                                      remote_commit, err) != 0 ||
-          git_overleaf_git_config_set(cfg, repo, "git-overleaf.pendingAction",
-                                      "pull", err) != 0) {
+      printf("Local and remote content match; base ref updated\n");
+      break;
+    case SYNC_REMOTE_MATCHES_BASE:
+      printf("No remote Overleaf changes to pull into `%s'\n", branch);
+      break;
+    case SYNC_HEAD_MATCHES_BASE: {
+      const char* merge_args[] = {"merge", "--ff-only", remote_commit};
+      if (git_overleaf_git_ok(cfg, repo, merge_args, 3, NULL, err) != 0 ||
+          git_overleaf_git_set_base_ref(cfg, repo, "HEAD", err) != 0) {
         goto fail;
       }
-      printf("Merge conflict on `%s'. Resolve conflicts, commit, then push "
-             "with Emacs git-overleaf or a future CLI push.\n",
-             branch);
+      printf("Pulled remote Overleaf changes into `%s'\n", branch);
+      break;
     }
-    break;
-  }
+    case SYNC_DIVERGED: {
+      const char* merge_args[] = {"merge", "--no-ff", "--no-edit",
+                                  remote_commit};
+      GoProcessResult merge_result;
+      if (git_overleaf_git_capture(cfg, repo, merge_args, 4, NULL, 1,
+                                   &merge_result, err) != 0) {
+        goto fail;
+      }
+      if (merge_result.status == 0) {
+        git_overleaf_process_result_free(&merge_result);
+        if (git_overleaf_git_set_base_ref(cfg, repo, remote_commit, err) != 0) {
+          goto fail;
+        }
+        printf("Pulled Overleaf changes into `%s'\n", branch);
+      } else {
+        git_overleaf_process_result_free(&merge_result);
+        if (git_overleaf_git_config_set(cfg, repo,
+                                        "git-overleaf.pendingRemoteCommit",
+                                        remote_commit, err) != 0 ||
+            git_overleaf_git_config_set(cfg, repo, "git-overleaf.pendingAction",
+                                        "pull", err) != 0) {
+          goto fail;
+        }
+        printf(
+            "Merge conflict on `%s'. Resolve conflicts, commit, then push "
+            "with Emacs git-overleaf or a future CLI push.\n",
+            branch);
+      }
+      break;
+    }
   }
 
   git_overleaf_snapshot_free(&snapshot);

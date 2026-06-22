@@ -1,6 +1,19 @@
-#define _POSIX_C_SOURCE 200809L
+// Copyright (C) 2026 Jamie Cui <jamie.cui@outlook.com>
 
-#include "git-overleaf-cli/cli.h"
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+#define _POSIX_C_SOURCE 200809L
 
 #include <errno.h>
 #include <signal.h>
@@ -10,12 +23,14 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
-static char *format_command(char *const argv[]) {
+#include "git-overleaf-cli.h"
+
+static char* format_command(char* const argv[]) {
   size_t len = 0;
   for (size_t i = 0; argv[i]; i++) {
     len += strlen(argv[i]) + 1;
   }
-  char *text = malloc(len + 1);
+  char* text = malloc(len + 1);
   if (!text) {
     return NULL;
   }
@@ -29,9 +44,9 @@ static char *format_command(char *const argv[]) {
   return text;
 }
 
-int git_overleaf_process_run(char *const argv[], const char *cwd,
-                             char *const env[], int allow_failure,
-                             GoProcessResult *out, GoError *err) {
+int git_overleaf_process_run(char* const argv[], const char* cwd,
+                             char* const env[], int allow_failure,
+                             GoProcessResult* out, GoError* err) {
   memset(out, 0, sizeof(*out));
   int pipefd[2];
   if (pipe(pipefd) != 0) {
@@ -56,10 +71,10 @@ int git_overleaf_process_run(char *const argv[], const char *cwd,
     }
     if (env) {
       for (size_t i = 0; env[i]; i++) {
-        char *eq = strchr(env[i], '=');
+        char* eq = strchr(env[i], '=');
         if (eq) {
           size_t name_len = (size_t)(eq - env[i]);
-          char *name = git_overleaf_xstrndup(env[i], name_len);
+          char* name = git_overleaf_xstrndup(env[i], name_len);
           if (!name) {
             _exit(127);
           }
@@ -89,7 +104,7 @@ int git_overleaf_process_run(char *const argv[], const char *cwd,
     if (n == 0) {
       break;
     }
-    char *next = realloc(buffer.data, buffer.len + (size_t)n + 1);
+    char* next = realloc(buffer.data, buffer.len + (size_t)n + 1);
     if (!next) {
       close(pipefd[0]);
       free(buffer.data);
@@ -120,7 +135,7 @@ int git_overleaf_process_run(char *const argv[], const char *cwd,
   if (!buffer.data) {
     buffer.data = git_overleaf_xstrdup("");
   }
-  char *trimmed = git_overleaf_trimmed_dup(buffer.data ? buffer.data : "");
+  char* trimmed = git_overleaf_trimmed_dup(buffer.data ? buffer.data : "");
   free(buffer.data);
   if (!trimmed) {
     return git_overleaf_error(err, "out of memory");
@@ -129,7 +144,7 @@ int git_overleaf_process_run(char *const argv[], const char *cwd,
   out->status = exit_status;
   out->output = trimmed;
   if (!allow_failure && exit_status != 0) {
-    char *command = format_command(argv);
+    char* command = format_command(argv);
     git_overleaf_error(err, "%s failed with status %d: %s",
                        command ? command : argv[0], exit_status,
                        out->output && *out->output ? out->output : "no output");
@@ -139,7 +154,7 @@ int git_overleaf_process_run(char *const argv[], const char *cwd,
   return 0;
 }
 
-void git_overleaf_process_result_free(GoProcessResult *result) {
+void git_overleaf_process_result_free(GoProcessResult* result) {
   if (result) {
     free(result->output);
     result->output = NULL;

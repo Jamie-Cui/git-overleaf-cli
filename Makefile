@@ -23,7 +23,7 @@ check-deps:
 $(TARGET): $(OBJ)
 	$(CC) $(CFLAGS) $(OBJ) $(LDLIBS) -o $@
 
-$(BUILD_DIR)/%.o: src/%.c include/git-overleaf-cli/cli.h | $(BUILD_DIR)
+$(BUILD_DIR)/%.o: src/%.c include/git-overleaf-cli.h | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) $(PKG_CFLAGS) $(CFLAGS) -c $< -o $@
 
 $(BUILD_DIR):

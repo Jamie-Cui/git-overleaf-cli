@@ -1,6 +1,19 @@
-#define _POSIX_C_SOURCE 200809L
+// Copyright (C) 2026 Jamie Cui <jamie.cui@outlook.com>
 
-#include "git-overleaf-cli/cli.h"
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+#define _POSIX_C_SOURCE 200809L
 
 #include <curl/curl.h>
 #include <errno.h>
@@ -9,11 +22,13 @@
 #include <stdlib.h>
 #include <string.h>
 
-static size_t write_buffer_cb(char *ptr, size_t size, size_t nmemb,
-                              void *userdata) {
+#include "git-overleaf-cli.h"
+
+static size_t write_buffer_cb(char* ptr, size_t size, size_t nmemb,
+                              void* userdata) {
   size_t total = size * nmemb;
-  GoBuffer *buffer = userdata;
-  char *next = realloc(buffer->data, buffer->len + total + 1);
+  GoBuffer* buffer = userdata;
+  char* next = realloc(buffer->data, buffer->len + total + 1);
   if (!next) {
     return 0;
   }
@@ -24,15 +39,15 @@ static size_t write_buffer_cb(char *ptr, size_t size, size_t nmemb,
   return total;
 }
 
-static size_t write_file_cb(char *ptr, size_t size, size_t nmemb,
-                            void *userdata) {
+static size_t write_file_cb(char* ptr, size_t size, size_t nmemb,
+                            void* userdata) {
   return fwrite(ptr, size, nmemb, userdata);
 }
 
-static struct curl_slist *build_headers(const GoConfig *cfg,
-                                        const char *referer, GoError *err) {
-  struct curl_slist *headers = NULL;
-  char *origin = git_overleaf_sanitize_url(cfg->url);
+static struct curl_slist* build_headers(const GoConfig* cfg,
+                                        const char* referer, GoError* err) {
+  struct curl_slist* headers = NULL;
+  char* origin = git_overleaf_sanitize_url(cfg->url);
   if (!origin) {
     git_overleaf_error(err, "out of memory");
     return NULL;
@@ -42,9 +57,9 @@ static struct curl_slist *build_headers(const GoConfig *cfg,
   size_t origin_len = strlen("Origin: ") + strlen(origin) + 1;
   size_t referer_len =
       strlen("Referer: ") + strlen(referer ? referer : origin) + 1;
-  char *cookie_header = malloc(cookie_len);
-  char *origin_header = malloc(origin_len);
-  char *referer_header = malloc(referer_len);
+  char* cookie_header = malloc(cookie_len);
+  char* origin_header = malloc(origin_len);
+  char* referer_header = malloc(referer_len);
   if (!cookie_header || !origin_header || !referer_header) {
     free(origin);
     free(cookie_header);
@@ -70,8 +85,8 @@ static struct curl_slist *build_headers(const GoConfig *cfg,
   return headers;
 }
 
-static int configure_common(CURL *curl, const char *url,
-                            struct curl_slist *headers, char *error_buffer) {
+static int configure_common(CURL* curl, const char* url,
+                            struct curl_slist* headers, char* error_buffer) {
   curl_easy_setopt(curl, CURLOPT_URL, url);
   curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
   curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
@@ -83,14 +98,14 @@ static int configure_common(CURL *curl, const char *url,
   return 0;
 }
 
-int git_overleaf_http_get(const GoConfig *cfg, const char *url,
-                          const char *referer, GoBuffer *out, GoError *err) {
+int git_overleaf_http_get(const GoConfig* cfg, const char* url,
+                          const char* referer, GoBuffer* out, GoError* err) {
   memset(out, 0, sizeof(*out));
-  CURL *curl = curl_easy_init();
+  CURL* curl = curl_easy_init();
   if (!curl) {
     return git_overleaf_error(err, "could not initialize curl");
   }
-  struct curl_slist *headers = build_headers(cfg, referer, err);
+  struct curl_slist* headers = build_headers(cfg, referer, err);
   if (!headers) {
     curl_easy_cleanup(curl);
     return -1;
@@ -106,9 +121,9 @@ int git_overleaf_http_get(const GoConfig *cfg, const char *url,
   curl_easy_cleanup(curl);
   if (code != CURLE_OK) {
     git_overleaf_buffer_free(out);
-    return git_overleaf_error(err, "GET %s failed: HTTP %ld: %s", url, status,
-                              error_buffer[0] ? error_buffer
-                                              : curl_easy_strerror(code));
+    return git_overleaf_error(
+        err, "GET %s failed: HTTP %ld: %s", url, status,
+        error_buffer[0] ? error_buffer : curl_easy_strerror(code));
   }
   if (!out->data) {
     out->data = git_overleaf_xstrdup("");
@@ -116,20 +131,20 @@ int git_overleaf_http_get(const GoConfig *cfg, const char *url,
   return out->data ? 0 : git_overleaf_error(err, "out of memory");
 }
 
-int git_overleaf_http_download(const GoConfig *cfg, const char *url,
-                               const char *referer, const char *output_file,
-                               GoError *err) {
-  CURL *curl = curl_easy_init();
+int git_overleaf_http_download(const GoConfig* cfg, const char* url,
+                               const char* referer, const char* output_file,
+                               GoError* err) {
+  CURL* curl = curl_easy_init();
   if (!curl) {
     return git_overleaf_error(err, "could not initialize curl");
   }
-  FILE *file = fopen(output_file, "wb");
+  FILE* file = fopen(output_file, "wb");
   if (!file) {
     curl_easy_cleanup(curl);
     return git_overleaf_error(err, "could not open %s: %s", output_file,
                               strerror(errno));
   }
-  struct curl_slist *headers = build_headers(cfg, referer, err);
+  struct curl_slist* headers = build_headers(cfg, referer, err);
   if (!headers) {
     fclose(file);
     curl_easy_cleanup(curl);
@@ -169,9 +184,9 @@ static int hex_value(char c) {
   return -1;
 }
 
-static char *html_decode(const char *input) {
+static char* html_decode(const char* input) {
   size_t len = strlen(input);
-  char *out = malloc(len + 1);
+  char* out = malloc(len + 1);
   if (!out) {
     return NULL;
   }
@@ -201,9 +216,9 @@ static char *html_decode(const char *input) {
   return out;
 }
 
-static char *percent_decode(const char *input) {
+static char* percent_decode(const char* input) {
   size_t len = strlen(input);
-  char *out = malloc(len + 1);
+  char* out = malloc(len + 1);
   if (!out) {
     return NULL;
   }
@@ -226,16 +241,16 @@ static char *percent_decode(const char *input) {
   return out;
 }
 
-static char *extract_attr(const char *tag_start, const char *tag_end,
-                          const char *name) {
+static char* extract_attr(const char* tag_start, const char* tag_end,
+                          const char* name) {
   size_t name_len = strlen(name);
-  const char *p = tag_start;
+  const char* p = tag_start;
   while (p && p < tag_end) {
     p = strstr(p, name);
     if (!p || p >= tag_end) {
       break;
     }
-    const char *q = p + name_len;
+    const char* q = p + name_len;
     while (q < tag_end &&
            (*q == ' ' || *q == '\t' || *q == '\n' || *q == '\r')) {
       q++;
@@ -254,7 +269,7 @@ static char *extract_attr(const char *tag_start, const char *tag_end,
       continue;
     }
     char quote = *q++;
-    const char *value_start = q;
+    const char* value_start = q;
     while (q < tag_end && *q != quote) {
       q++;
     }
@@ -266,29 +281,29 @@ static char *extract_attr(const char *tag_start, const char *tag_end,
   return NULL;
 }
 
-static char *extract_projects_blob(const char *html, GoError *err) {
-  const char *marker = strstr(html, "ol-prefetchedProjectsBlob");
+static char* extract_projects_blob(const char* html, GoError* err) {
+  const char* marker = strstr(html, "ol-prefetchedProjectsBlob");
   if (!marker) {
     git_overleaf_error(err,
                        "could not find project list in Overleaf project page");
     return NULL;
   }
-  const char *tag_start = marker;
+  const char* tag_start = marker;
   while (tag_start > html && *tag_start != '<') {
     tag_start--;
   }
-  const char *tag_end = strchr(marker, '>');
+  const char* tag_end = strchr(marker, '>');
   if (!tag_end) {
     git_overleaf_error(err, "could not parse project list meta tag");
     return NULL;
   }
-  char *content = extract_attr(tag_start, tag_end, "content");
+  char* content = extract_attr(tag_start, tag_end, "content");
   if (!content) {
     git_overleaf_error(err, "could not find project list content attribute");
     return NULL;
   }
-  char *html_decoded = html_decode(content);
-  char *decoded = html_decoded ? percent_decode(html_decoded) : NULL;
+  char* html_decoded = html_decode(content);
+  char* decoded = html_decoded ? percent_decode(html_decoded) : NULL;
   free(content);
   free(html_decoded);
   if (!decoded) {
@@ -297,10 +312,10 @@ static char *extract_projects_blob(const char *html, GoError *err) {
   return decoded;
 }
 
-int git_overleaf_overleaf_list_projects(const GoConfig *cfg, GoProjectList *out,
-                                        GoError *err) {
+int git_overleaf_overleaf_list_projects(const GoConfig* cfg, GoProjectList* out,
+                                        GoError* err) {
   memset(out, 0, sizeof(*out));
-  char *url = git_overleaf_url_join(cfg->url, "project");
+  char* url = git_overleaf_url_join(cfg->url, "project");
   if (!url) {
     return git_overleaf_error(err, "out of memory");
   }
@@ -310,19 +325,19 @@ int git_overleaf_overleaf_list_projects(const GoConfig *cfg, GoProjectList *out,
     return -1;
   }
   free(url);
-  char *json_text = extract_projects_blob(page.data, err);
+  char* json_text = extract_projects_blob(page.data, err);
   git_overleaf_buffer_free(&page);
   if (!json_text) {
     return -1;
   }
   json_error_t json_err;
-  json_t *root = json_loads(json_text, 0, &json_err);
+  json_t* root = json_loads(json_text, 0, &json_err);
   free(json_text);
   if (!root) {
     return git_overleaf_error(err, "could not parse project list JSON: %s",
                               json_err.text);
   }
-  json_t *projects = json_object_get(root, "projects");
+  json_t* projects = json_object_get(root, "projects");
   if (!json_is_array(projects)) {
     json_decref(root);
     return git_overleaf_error(
@@ -336,11 +351,11 @@ int git_overleaf_overleaf_list_projects(const GoConfig *cfg, GoProjectList *out,
   }
   out->len = count;
   for (size_t i = 0; i < count; i++) {
-    json_t *project = json_array_get(projects, i);
-    json_t *id = json_object_get(project, "id");
-    json_t *name = json_object_get(project, "name");
-    json_t *owner = json_object_get(project, "owner");
-    json_t *email = owner ? json_object_get(owner, "email") : NULL;
+    json_t* project = json_array_get(projects, i);
+    json_t* id = json_object_get(project, "id");
+    json_t* name = json_object_get(project, "name");
+    json_t* owner = json_object_get(project, "owner");
+    json_t* email = owner ? json_object_get(owner, "email") : NULL;
     out->items[i].id =
         git_overleaf_xstrdup(json_is_string(id) ? json_string_value(id) : "");
     out->items[i].name = git_overleaf_xstrdup(
@@ -358,7 +373,7 @@ int git_overleaf_overleaf_list_projects(const GoConfig *cfg, GoProjectList *out,
   return 0;
 }
 
-void git_overleaf_project_list_free(GoProjectList *list) {
+void git_overleaf_project_list_free(GoProjectList* list) {
   if (!list) {
     return;
   }
