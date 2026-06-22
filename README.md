@@ -5,8 +5,6 @@
 
 Experimental native C CLI for `git-overleaf`.
 
-## What It Does
-
 - `auth`: save a raw Overleaf Cookie header or import one from Firefox
 - `list`: list projects visible to the current cookie
 - `clone`: download a project snapshot into a new Git repo
