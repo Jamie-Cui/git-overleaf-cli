@@ -1,8 +1,8 @@
 # git-overleaf-cli
 
 This repository contains an experimental native C command-line client for
-git-overleaf.  It is intentionally separate from the Emacs package files and is
-not meant to be included in the MELPA package recipe.
+git-overleaf. It is a standalone project with its own source, build,
+configuration, and release process.
 
 ## Scope
 
@@ -23,9 +23,9 @@ Not implemented yet:
 - ShareJS/OT text updates that preserve remote document ids.
 
 `pull` uses only the snapshot download path, so it does not need WebSocket/OT.
-When a pull produces merge conflicts, it writes the same pending-pull Git config
-keys used by the Emacs package.  Resolve the merge, commit it, then finish with
-the Emacs `git-overleaf-push` command until native CLI push lands.
+When a pull produces merge conflicts, it records an internal pending-pull state
+in Git config. Resolve the merge and commit it locally; native push/overwrite is
+not implemented yet.
 
 ## Build
 
@@ -64,7 +64,17 @@ make clean
 
 ## Usage
 
-Save cookies manually:
+Subcommands:
+
+- `auth`: save a raw Overleaf Cookie header to a local cookie file.
+- `list`: list Overleaf projects visible to the current cookie.
+- `clone`: download a project snapshot and create a new Git repository.
+- `init`: bind an existing Git repository to an Overleaf project without
+  changing its working tree.
+- `pull`: download the latest project snapshot and merge it into the bound Git
+  repository.
+
+Save cookies manually with `auth`:
 
 ```sh
 ./build/git-overleaf-cli auth \
@@ -72,13 +82,13 @@ Save cookies manually:
   --cookie-file ~/.git-overleaf-cookies
 ```
 
-List projects:
+List accessible projects with `list`:
 
 ```sh
 ./build/git-overleaf-cli list
 ```
 
-Clone by project id:
+Create a new local repository from a project snapshot with `clone`:
 
 ```sh
 ./build/git-overleaf-cli clone \
@@ -87,7 +97,7 @@ Clone by project id:
   ./project-name
 ```
 
-Bind an existing Git repository without changing its working tree:
+Record project metadata in an existing repository with `init`:
 
 ```sh
 ./build/git-overleaf-cli init \
@@ -96,21 +106,21 @@ Bind an existing Git repository without changing its working tree:
   --repo /path/to/repo
 ```
 
-Pull remote Overleaf changes:
+Fetch and merge remote Overleaf changes with `pull`:
 
 ```sh
 ./build/git-overleaf-cli pull --repo /path/to/repo
 ```
 
-Use a self-hosted Overleaf URL:
+Use `--url` before any subcommand to target a self-hosted Overleaf instance:
 
 ```sh
 ./build/git-overleaf-cli --url https://latex.example.edu list
 ```
 
-## Compatibility
+## Repository Metadata
 
-The CLI writes the same repository metadata keys as the Emacs package:
+The CLI stores its repository metadata in these Git config keys:
 
 - `git-overleaf.projectId`
 - `git-overleaf.projectName`
@@ -119,7 +129,7 @@ The CLI writes the same repository metadata keys as the Emacs package:
 - `git-overleaf.pendingAction`
 - `git-overleaf.pendingRemoteCommit`
 
-It also uses the same base ref:
+It uses this base ref:
 
 ```text
 refs/git-overleaf/base
@@ -131,8 +141,7 @@ The reserved remote metadata file remains:
 .git-overleaf-sync.json
 ```
 
-Downloaded snapshots remove that file before local Git comparisons, matching
-the Emacs implementation.
+Downloaded snapshots remove that file before local Git comparisons.
 
 ## Security
 
