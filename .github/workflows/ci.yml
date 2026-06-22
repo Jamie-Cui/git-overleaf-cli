@@ -1,5 +1,8 @@
 name: CI
 
+permissions:
+  contents: read
+
 on:
   push:
     branches:
@@ -36,6 +39,8 @@ jobs:
 
   coverage:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
       - name: Install dependencies
@@ -59,6 +64,51 @@ jobs:
           -DGIT_OVERLEAF_ENABLE_COVERAGE=ON
       - name: Coverage summary
         run: cmake --build build-coverage --target coverage --parallel
+      - name: Update coverage badge data
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import xml.etree.ElementTree as ET
+
+          coverage = ET.parse("build-coverage/coverage.xml").getroot()
+          percent = float(coverage.attrib["line-rate"]) * 100.0
+          if percent >= 90:
+              color = "brightgreen"
+          elif percent >= 80:
+              color = "green"
+          elif percent >= 70:
+              color = "yellowgreen"
+          elif percent >= 60:
+              color = "yellow"
+          elif percent >= 50:
+              color = "orange"
+          else:
+              color = "red"
+
+          badge = {
+              "schemaVersion": 1,
+              "label": "coverage",
+              "message": f"{percent:.2f}%",
+              "color": color,
+          }
+          os.makedirs(".github/badges", exist_ok=True)
+          with open(".github/badges/coverage.json", "w", encoding="utf-8") as output:
+              json.dump(badge, output, indent=2)
+              output.write("\n")
+          PY
+      - name: Commit coverage badge data
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        run: |
+          if git diff --quiet -- .github/badges/coverage.json; then
+            echo "Coverage badge data is already up to date."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .github/badges/coverage.json
+          git commit -m "chore: update coverage badge data [skip ci]"
+          git push origin HEAD:${GITHUB_REF_NAME}
       - name: Upload coverage report
         uses: actions/upload-artifact@v4
         with:

@@ -1,5 +1,8 @@
 # git-overleaf-cli
 
+[![CI](https://github.com/Jamie-Cui/git-overleaf-cli/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/Jamie-Cui/git-overleaf-cli/actions/workflows/ci.yml)
+[![Coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/Jamie-Cui/git-overleaf-cli/master/.github/badges/coverage.json)](https://github.com/Jamie-Cui/git-overleaf-cli/actions/workflows/ci.yml)
+
 Experimental native C CLI for `git-overleaf`.
 
 ## What It Does
