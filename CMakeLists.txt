@@ -20,11 +20,35 @@ project(git_overleaf_cli VERSION 0.1 LANGUAGES C CXX)
 include(CTest)
 
 option(GIT_OVERLEAF_ENABLE_COVERAGE "Build with coverage instrumentation" OFF)
+option(GIT_OVERLEAF_BUNDLE_DEPS
+  "Build bundled static 3rd-party deps to reduce runtime shared-library deps" OFF)
 
-find_package(PkgConfig REQUIRED)
-pkg_check_modules(LIBCURL REQUIRED IMPORTED_TARGET libcurl)
-pkg_check_modules(JANSSON REQUIRED IMPORTED_TARGET jansson)
-pkg_check_modules(SQLITE3 REQUIRED IMPORTED_TARGET sqlite3)
+foreach(legacy_option IN ITEMS
+    GIT_OVERLEAF_DEPENDENCY_MODE
+    GIT_OVERLEAF_VENDOR_DEPS
+    GIT_OVERLEAF_PREFER_STATIC_DEPS
+    GIT_OVERLEAF_REQUIRE_STATIC_DEPS
+    GIT_OVERLEAF_STATIC_EXECUTABLE)
+  unset(${legacy_option} CACHE)
+  unset(${legacy_option})
+endforeach()
+
+if(GIT_OVERLEAF_BUNDLE_DEPS)
+  include(cmake/VendoredDeps.cmake)
+  git_overleaf_configure_vendored_deps()
+else()
+  find_package(PkgConfig REQUIRED)
+
+  function(git_overleaf_pkg_dependency target prefix pkg_name)
+    pkg_check_modules(${prefix} REQUIRED IMPORTED_TARGET ${pkg_name})
+    add_library(${target} INTERFACE)
+    target_link_libraries(${target} INTERFACE PkgConfig::${prefix})
+  endfunction()
+
+  git_overleaf_pkg_dependency(git_overleaf_dep_libcurl LIBCURL libcurl)
+  git_overleaf_pkg_dependency(git_overleaf_dep_jansson JANSSON jansson)
+  git_overleaf_pkg_dependency(git_overleaf_dep_sqlite3 SQLITE3 sqlite3)
+endif()
 
 function(git_overleaf_apply_warnings target)
   if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
@@ -65,9 +89,9 @@ target_include_directories(git_overleaf_core
 )
 target_link_libraries(git_overleaf_core
   PUBLIC
-    PkgConfig::LIBCURL
-    PkgConfig::JANSSON
-    PkgConfig::SQLITE3
+    git_overleaf_dep_libcurl
+    git_overleaf_dep_jansson
+    git_overleaf_dep_sqlite3
 )
 git_overleaf_apply_warnings(git_overleaf_core)
 git_overleaf_enable_coverage(git_overleaf_core)
